@@ -1,8 +1,24 @@
 import { useIsFocused } from '@react-navigation/native';
-import { ChartLineUp, Database } from 'phosphor-react-native'; // Ícones para o relatório
+// --- MUDANÇA 1: Importar ícones e bibliotecas novas ---
+import { ChartLineUp, Database, DownloadSimple } from 'phosphor-react-native';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, SafeAreaView, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator, // Importar TouchableOpacity
+  Alert,
+  FlatList,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
+
+// Importar as bibliotecas que instalamos
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+
 import { getProdutos, getSaidas } from '../services/storage';
+// --- Fim da Mudança 1 ---
 
 // Sua paleta de cores
 const cores = {
@@ -14,7 +30,7 @@ const cores = {
   texto: '#325E54',
 };
 
-// Interface para os dados processados do relatório
+// Interface (sem mudanças)
 interface ItemRelatorio {
   id: string;
   nome: string;
@@ -25,53 +41,139 @@ interface ItemRelatorio {
   lucroTotal: number;
 }
 
+// --- MUDANÇA 2: Função para gerar o HTML do PDF ---
+// Esta função cria a string de HTML que será convertida em PDF
+const gerarHTMLRelatorio = (dados: ItemRelatorio[], lucroGeral: number): string => {
+  // Mapeia os dados do relatório para linhas de tabela (<tr>)
+  const linhasTabela = dados.map(item => `
+    <tr>
+      <td>${item.nome}</td>
+      <td>${item.totalEntrada} un.</td>
+      <td>${item.totalVendido} un.</td>
+      <td>${item.estoqueDisponivel} un.</td>
+      <td>R$ ${item.lucroTotal.toFixed(2)}</td>
+    </tr>
+  `).join(''); // .join('') junta todas as linhas em uma string só
+
+  // Retorna o HTML completo com estilos (CSS)
+  return `
+    <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: ${cores.begeFundo};
+            color: ${cores.texto};
+          }
+          h1, h2 {
+            color: ${cores.verdeEscuro};
+            border-bottom: 2px solid ${cores.verdeClaro};
+            padding-bottom: 5px;
+          }
+          .summary-card {
+            background-color: ${cores.verdeMedio};
+            color: ${cores.branco};
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 20px;
+          }
+          .summary-card h2 {
+            color: ${cores.branco};
+            margin: 0 0 10px 0;
+            border-bottom: none;
+          }
+          .summary-card p {
+            font-size: 28px;
+            font-weight: bold;
+            margin: 0;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+          }
+          th, td {
+            border: 1px solid ${cores.verdeClaro};
+            padding: 10px;
+            text-align: left;
+          }
+          th {
+            background-color: ${cores.verdeEscuro};
+            color: ${cores.branco};
+          }
+          tr:nth-child(even) {
+            background-color: ${cores.branco};
+          }
+          tr:nth-child(odd) {
+            background-color: #f7f5ef; /* Bege um pouco mais claro */
+          }
+        </style>
+      </head>
+      <body>
+        <h1>Relatório de Estoque e Lucro</h1>
+        
+        <div class="summary-card">
+          <h2>Lucro Total Acumulado</h2>
+          <p>R$ ${lucroGeral.toFixed(2)}</p>
+        </div>
+
+        <h2>Relatório Detalhado por Produto</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Produto</th>
+              <th>Entrada</th>
+              <th>Saída</th>
+              <th>Estoque</th>
+              <th>Lucro</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${linhasTabela}
+          </tbody>
+        </table>
+      </body>
+    </html>
+  `;
+};
+// --- Fim da Mudança 2 ---
+
+
 export default function RelatorioScreen() {
   const [dadosRelatorio, setDadosRelatorio] = useState<ItemRelatorio[]>([]);
   const [lucroGeral, setLucroGeral] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   
+  // --- MUDANÇA 3: Estado de carregamento para o PDF ---
+  const [isExportando, setIsExportando] = useState(false);
+  
   const isFocused = useIsFocused();
 
-  // Recalcula o relatório sempre que a tela entra em foco
   useEffect(() => {
     if (isFocused) {
       gerarRelatorio();
     }
   }, [isFocused]);
 
-  /**
-   * Busca dados de entrada e saída e processa o relatório.
-   */
   const gerarRelatorio = async () => {
+    // (Lógica sem mudanças)
     setIsLoading(true);
-    
     const produtos = await getProdutos();
     const saidas = await getSaidas();
-
     let lucroAcumuladoGeral = 0;
-
-    // Processa os dados
     const relatorio = produtos.map(produto => {
-      // 1. Filtra saídas apenas para este produto
       const saidasDoProduto = saidas.filter(s => s.produtoId === produto.id);
-
-      // 2. Calcula total vendido
       const totalVendido = saidasDoProduto.reduce((soma, saida) => soma + saida.quantidade, 0);
-
-      // 3. Calcula o lucro (Item 6 do roteiro)
-      // Lucro = soma( (preçoVenda - precoCompra) * quantidade vendida )
       const lucroTotalProduto = saidasDoProduto.reduce((somaLucro, saida) => {
         const lucroDaVenda = (saida.precoVenda - produto.precoCompra) * saida.quantidade;
         return somaLucro + lucroDaVenda;
       }, 0);
-
-      // 4. Calcula estoque disponível
       const estoqueDisponivel = produto.quantidade - totalVendido;
-
-      // Acumula o lucro geral
       lucroAcumuladoGeral += lucroTotalProduto;
-
-      // Retorna o objeto formatado
       return {
         id: produto.id,
         nome: produto.nome,
@@ -82,13 +184,45 @@ export default function RelatorioScreen() {
         lucroTotal: lucroTotalProduto,
       };
     });
-
     setDadosRelatorio(relatorio);
     setLucroGeral(lucroAcumuladoGeral);
     setIsLoading(false);
   };
 
-  // Como renderizar cada item do relatório
+  // --- MUDANÇA 4: Função para Exportar o PDF ---
+  const handleExportarPDF = async () => {
+    if (isExportando) return; // Previne cliques duplos
+    setIsExportando(true);
+
+    try {
+      // 1. Gera o HTML
+      const htmlContent = gerarHTMLRelatorio(dadosRelatorio, lucroGeral);
+      
+      // 2. Cria o arquivo PDF
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
+      
+      // 3. Compartilha o arquivo
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert('Erro', 'O compartilhamento não está disponível neste dispositivo.');
+        return;
+      }
+      
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'Exportar Relatório em PDF',
+      });
+
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Erro', 'Ocorreu um erro ao exportar o PDF.');
+    } finally {
+      setIsExportando(false); // Libera o botão
+    }
+  };
+  // --- Fim da Mudança 4 ---
+
+
+  // renderItem (Sem mudanças)
   const renderItem = ({ item }: { item: ItemRelatorio }) => (
     <View style={styles.itemContainer}>
       <Text style={styles.itemNome}>{item.nome}</Text>
@@ -126,6 +260,19 @@ export default function RelatorioScreen() {
           <ChartLineUp size={40} color={cores.branco} weight="bold" />
       </View>
 
+      {/* --- MUDANÇA 5: Adicionar o Botão de Exportar --- */}
+      <TouchableOpacity 
+        style={styles.botaoExportar}
+        onPress={handleExportarPDF}
+        disabled={isExportando || isLoading}
+      >
+        <DownloadSimple size={20} color={cores.verdeEscuro} weight="bold" />
+        <Text style={styles.botaoExportarTexto}>
+          {isExportando ? 'Exportando...' : 'Exportar Relatório (PDF)'}
+        </Text>
+      </TouchableOpacity>
+      {/* --- Fim da Mudança 5 --- */}
+
       <Text style={styles.listaTitulo}>Relatório Detalhado por Produto</Text>
 
       {isLoading ? (
@@ -155,7 +302,7 @@ const styles = StyleSheet.create({
     backgroundColor: cores.begeFundo,
   },
   resumoGeralCard: {
-    backgroundColor: cores.verdeMedio, // Cor média
+    backgroundColor: cores.verdeMedio, 
     margin: 16,
     padding: 20,
     borderRadius: 12,
@@ -178,6 +325,33 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: cores.branco,
   },
+
+  // --- MUDANÇA 6: Estilos para o botão de exportar ---
+  botaoExportar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: cores.branco,
+    marginHorizontal: 16,
+    marginBottom: 10,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: cores.verdeClaro,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  botaoExportarTexto: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: cores.verdeEscuro,
+    marginLeft: 10,
+  },
+  // --- Fim da Mudança 6 ---
+
   listaTitulo: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -241,7 +415,7 @@ const styles = StyleSheet.create({
   lucroValor: {
       fontSize: 16,
       fontWeight: 'bold',
-      color: cores.verdeEscuro, // Lucro em destaque
+      color: cores.verdeEscuro, 
   },
   emptyContainer: {
       flex: 1,
