@@ -88,4 +88,4 @@ Este projeto está sob a licença **MIT**.
 
 ---
 
-👨‍💻 Desenvolvido por **Paulo Henrique**
+👨‍💻 Desenvolvido por **João Lima** e **Paulo Henrique** 
