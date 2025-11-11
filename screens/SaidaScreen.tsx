@@ -1,25 +1,26 @@
+import { useIsFocused } from '@react-navigation/native';
+import { Pencil, Trash } from 'phosphor-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
-  Button,
   FlatList,
   Keyboard,
   SafeAreaView,
-  ScrollView // Usar ScrollView para o seletor de produtos
-  ,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
-// Importar o hook useIsFocused
-import { useIsFocused } from '@react-navigation/native';
 
-// Importar nossos tipos e funções de storage
+// --- MUDANÇA 1: Importar hooks de navegação ---
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../App'; // Importa os tipos do App.tsx
+
 import { Produto, Saida, getProdutos, getSaidas, salvarSaidas } from '../services/storage';
 
-// Sua nova paleta de cores
 const cores = {
   verdeEscuro: '#325E54',
   verdeMedio: '#4A7969',
@@ -31,47 +32,41 @@ const cores = {
   danger: '#D9534F'
 };
 
-// Interface para o produto com estoque calculado
 interface ProdutoComEstoque extends Produto {
   estoqueDisponivel: number;
 }
 
+// --- MUDANÇA 2: Definir o tipo da propriedade de navegação ---
+type SaidaScreenNavigationProp = StackNavigationProp<RootStackParamList, 'EditarSaida'>;
+
 export default function SaidaScreen() {
-  // Estado para os produtos com estoque calculado
   const [produtosDisponiveis, setProdutosDisponiveis] = useState<ProdutoComEstoque[]>([]);
-  // Estado para todas as saídas registradas
   const [saidas, setSaidas] = useState<Saida[]>([]);
-  
-  // Estados para o formulário
   const [produtoSelecionado, setProdutoSelecionado] = useState<ProdutoComEstoque | null>(null);
   const [quantidadeSaida, setQuantidadeSaida] = useState('');
   const [precoVenda, setPrecoVenda] = useState('');
-
   const isFocused = useIsFocused();
 
-  // --- NOVO: Carregar dados quando a tela focar ---
+  // --- MUDANÇA 3: Inicializar o hook de navegação ---
+  const navigation = useNavigation<SaidaScreenNavigationProp>();
+
   useEffect(() => {
     if (isFocused) {
       carregarDados();
     }
   }, [isFocused]);
 
-  /**
-   * Carrega produtos e saídas, e calcula o estoque real.
-   */
   const carregarDados = async () => {
+    // (Lógica sem mudanças)
     const produtosSalvos = await getProdutos();
     const saidasSalvas = await getSaidas();
     setSaidas(saidasSalvas);
 
-    // Calcular estoque real (Item 4 do roteiro)
     const produtosComEstoque = produtosSalvos.map(produto => {
-      // 1. Soma todas as saídas anteriores para este produto
       const totalVendido = saidasSalvas
         .filter(saida => saida.produtoId === produto.id)
         .reduce((soma, saida) => soma + saida.quantidade, 0);
       
-      // 2. Calcula o estoque disponível
       const estoqueDisponivel = produto.quantidade - totalVendido;
 
       return {
@@ -79,13 +74,10 @@ export default function SaidaScreen() {
         estoqueDisponivel: estoqueDisponivel
       };
     })
-    // 3. Filtra produtos que ainda têm estoque
     .filter(produto => produto.estoqueDisponivel > 0);
 
     setProdutosDisponiveis(produtosComEstoque);
     
-    // Se o produto que estava selecionado foi vendido e acabou o estoque,
-    // ele sumirá da lista, então limpamos a seleção.
     if (produtoSelecionado) {
         const produtoAindaDisponivel = produtosComEstoque.find(p => p.id === produtoSelecionado.id);
         if (!produtoAindaDisponivel) {
@@ -94,23 +86,18 @@ export default function SaidaScreen() {
     }
   };
 
-  // --- ATUALIZADO: Registrar Saída ---
   const handleRegistrarSaida = async () => {
+    // (Lógica sem mudanças)
     if (!produtoSelecionado || !quantidadeSaida.trim() || !precoVenda.trim()) {
       Alert.alert('Erro', 'Selecione um produto e preencha todos os campos.');
       return;
     }
-
     const qtdNum = parseInt(quantidadeSaida, 10);
     const precoVendaNum = parseFloat(precoVenda.replace(',', '.'));
-
     if (isNaN(qtdNum) || qtdNum <= 0 || isNaN(precoVendaNum) || precoVendaNum <= 0) {
       Alert.alert('Erro', 'Quantidade e Preço de Venda devem ser números positivos.');
       return;
     }
-
-    // Validação de Estoque (Item 4 do roteiro)
-    // Usa 'estoqueDisponivel' que já foi calculado
     if (qtdNum > produtoSelecionado.estoqueDisponivel) {
       Alert.alert(
         'Erro de Estoque',
@@ -118,7 +105,6 @@ export default function SaidaScreen() {
       );
       return;
     }
-
     const novaSaida: Saida = {
       id: String(new Date().getTime()),
       produtoId: produtoSelecionado.id,
@@ -126,32 +112,63 @@ export default function SaidaScreen() {
       quantidade: qtdNum,
       precoVenda: precoVendaNum,
     };
-
     const novaListaSaidas = [novaSaida, ...saidas];
     setSaidas(novaListaSaidas);
-
-    // --- NOVO: Salva a lista de saídas no AsyncStorage ---
     await salvarSaidas(novaListaSaidas);
-
     Alert.alert('Sucesso', 'Saída registrada!');
-    
-    // Limpa campos
     setProdutoSelecionado(null);
     setQuantidadeSaida('');
     setPrecoVenda('');
     Keyboard.dismiss();
-
-    // --- NOVO: Recarrega os dados para atualizar o estoque na tela ---
     await carregarDados();
   };
 
-  // Como renderizar a lista de saídas registradas
+  // --- MUDANÇA 4: handleEditarSaida agora navega para a nova tela ---
+  const handleEditarSaida = (id: string) => {
+    // Linha antiga (com o alerta) foi removida
+    // Nova linha:
+    navigation.navigate('EditarSaida', { saidaId: id });
+  };
+
+  const handleExcluirSaida = (id: string) => {
+    // (Lógica sem mudanças)
+    Alert.alert(
+      'Confirmar Exclusão',
+      'Tem certeza que deseja excluir este registro de saída? Esta ação irá devolver o item ao estoque.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Excluir',
+          style: 'destructive',
+          onPress: async () => { 
+            const novaLista = saidas.filter(s => s.id !== id);
+            setSaidas(novaLista);
+            await salvarSaidas(novaLista);
+            await carregarDados(); 
+          },
+        },
+      ]
+    );
+  };
+
+  // renderItemSaida (Sem mudanças)
   const renderItemSaida = ({ item }: { item: Saida }) => (
     <View style={styles.itemContainer}>
-      <Text style={styles.itemNome}>{item.nomeProduto}</Text>
-      <Text style={styles.itemDetalhes}>
-        Qtd: {item.quantidade} | Preço Venda: R$ {item.precoVenda.toFixed(2)}
-      </Text>
+      <View style={styles.itemInfo}>
+        <Text style={styles.itemNome}>{item.nomeProduto}</Text>
+        <Text style={styles.itemDetalhes}>
+          Qtd: {item.quantidade} | Preço Venda: R$ {item.precoVenda.toFixed(2)}
+        </Text>
+      </View>
+      
+      <View style={styles.itemAcoes}>
+        <TouchableOpacity onPress={() => handleEditarSaida(item.id)} style={styles.acaoButton}>
+          <Pencil size={22} color={cores.verdeMedio} />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => handleExcluirSaida(item.id)} style={styles.acaoButton}>
+          <Trash size={22} color={cores.danger} />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -160,7 +177,6 @@ export default function SaidaScreen() {
       {/* Formulário de Saída */}
       <View style={styles.formContainer}>
         <Text style={styles.label}>Selecione o Produto (Estoque &gt; 0):</Text>
-        {/* Usamos ScrollView caso a lista de produtos seja grande */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.seletorScroll}>
           <View style={styles.seletorProdutoContainer}>
             {produtosDisponiveis.length > 0 ? (
@@ -195,7 +211,7 @@ export default function SaidaScreen() {
             onChangeText={setQuantidadeSaida}
             keyboardType="number-pad"
             placeholderTextColor={cores.placeholder}
-            editable={!!produtoSelecionado} // Só edita se houver produto
+            editable={!!produtoSelecionado} 
           />
           <TextInput
             style={[styles.input, styles.inputMetade]}
@@ -204,15 +220,20 @@ export default function SaidaScreen() {
             onChangeText={setPrecoVenda}
             keyboardType="numeric"
             placeholderTextColor={cores.placeholder}
-            editable={!!produtoSelecionado} // Só edita se houver produto
+            editable={!!produtoSelecionado}
           />
         </View>
-        <Button
-          title="Registrar Saída"
+
+        <TouchableOpacity
           onPress={handleRegistrarSaida}
-          color={cores.verdeEscuro}
-          disabled={!produtoSelecionado} // Desabilita se não houver produto
-        />
+          style={[
+            styles.botaoSalvar, 
+            !produtoSelecionado && styles.botaoSalvarDesabilitado
+          ]}
+          disabled={!produtoSelecionado}
+        >
+          <Text style={styles.botaoSalvarTexto}>REGISTRAR SAÍDA</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Lista de Saídas */}
@@ -227,7 +248,7 @@ export default function SaidaScreen() {
   );
 }
 
-// Estilos (quase iguais aos anteriores)
+// Estilos (Sem mudanças)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -245,7 +266,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   seletorScroll: {
-      maxHeight: 50, // Limita altura da scrollview
+      maxHeight: 50, 
       marginBottom: 12,
   },
   seletorProdutoContainer: {
@@ -260,7 +281,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: cores.verdeMedio,
     marginRight: 8,
-    height: 34, // Altura fixa
+    height: 34, 
   },
   chipProdutoSelecionado: {
     backgroundColor: cores.verdeMedio,
@@ -317,6 +338,12 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     borderRadius: 8,
     marginBottom: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  itemInfo: {
+    flex: 1,
   },
   itemNome: {
     fontSize: 16,
@@ -326,5 +353,29 @@ const styles = StyleSheet.create({
   itemDetalhes: {
     fontSize: 14,
     color: cores.verdeMedio,
+  },
+  itemAcoes: {
+    flexDirection: 'row',
+  },
+  acaoButton: {
+    marginLeft: 16,
+    padding: 4,
+  },
+  botaoSalvar: {
+    backgroundColor: cores.verdeEscuro,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  botaoSalvarDesabilitado: {
+    backgroundColor: cores.verdeClaro,
+    opacity: 0.8,
+  },
+  botaoSalvarTexto: {
+    color: cores.branco,
+    fontSize: 16,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
   },
 });

@@ -1,25 +1,33 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { NavigationContainer } from '@react-navigation/native';
-import React from 'react';
-// NOVO: Importar createStackNavigator
+// --- MUDANÇA 1: Importar RouteProp ---
+import { NavigationContainer, RouteProp } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
-// Ícone Pencil removido das tabs
 import { ArrowDown, ArrowUp, ChartBar } from 'phosphor-react-native';
+import React from 'react';
 
-// Importar as 4 telas
-import EdicaoScreen from './screens/EdicaoScreen'; // A nossa tela de Edição
+// Importar TODAS as telas
+import EdicaoScreen from './screens/EdicaoScreen';
 import EntradaScreen from './screens/EntradaScreen';
 import RelatorioScreen from './screens/RelatorioScreen';
 import SaidaScreen from './screens/SaidaScreen';
+// --- MUDANÇA 2: Importar a tela que faltava ---
+import EditarSaidaScreen from './screens/EditarSaidaScreen';
 
-// NOVO: Exportar os tipos de rotas da Pilha (Stack)
-// Isto é essencial para o TypeScript nas outras telas
+// O Stack Param List (sem mudanças)
 export type RootStackParamList = {
-  MainTabs: undefined; // Rota para as tabs (não precisa de parâmetros)
-  EditarProduto: { produtoId: string }; // Rota para a tela de edição (espera um ID)
+  MainTabs: undefined; 
+  EditarProduto: { produtoId: string }; 
+  EditarSaida: { saidaId: string };
 };
 
-// Cores (sem alteração)
+// --- MUDANÇA 3: Definir os tipos para as Abas (Tabs) ---
+// Isto vai corrigir o erro do 'route'
+type MainTabParamList = {
+  Entrada: undefined;
+  Saída: undefined;
+  Relatório: undefined;
+};
+
 const cores = {
   verdeEscuro: '#325E54',
   verdeMedio: '#4A7969',
@@ -29,18 +37,15 @@ const cores = {
   inactive: '#A3BFAA'
 };
 
-const Tab = createBottomTabNavigator();
-// NOVO: Criar o Stack
+// --- MUDANÇA 4: Informar ao createBottomTabNavigator o tipo ---
+const Tab = createBottomTabNavigator<MainTabParamList>(); 
 const Stack = createStackNavigator<RootStackParamList>();
 
-/**
- * NOVO: Este componente define apenas a navegação das Abas (Bottom Tabs)
- * Removemos a aba "Edição" daqui.
- */
 function MainTabNavigator() {
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
+      // --- MUDANÇA 5: Adicionar o tipo para { route } ---
+      screenOptions={({ route }: { route: RouteProp<MainTabParamList, keyof MainTabParamList> }) => ({
         tabBarIcon: ({ color, size, focused }: { color: string, size: number, focused: boolean }) => {
           if (route.name === 'Entrada') {
             return <ArrowUp color={color} size={size} weight={focused ? 'fill' : 'regular'} />;
@@ -49,7 +54,7 @@ function MainTabNavigator() {
           } else if (route.name === 'Relatório') {
             return <ChartBar color={color} size={size} weight={focused ? 'fill' : 'regular'} />;
           }
-          return null; // Ícone de Edição removido
+          return null; 
         },
         tabBarActiveTintColor: cores.verdeEscuro,
         tabBarInactiveTintColor: cores.inactive,
@@ -70,7 +75,6 @@ function MainTabNavigator() {
         }
       })}
     >
-      {/* Apenas as 3 abas principais */}
       <Tab.Screen name="Entrada" component={EntradaScreen} options={{ title: 'Cadastro (Entrada)' }} />
       <Tab.Screen name="Saída" component={SaidaScreen} options={{ title: 'Saída (Venda)' }} />
       <Tab.Screen name="Relatório" component={RelatorioScreen} />
@@ -78,36 +82,36 @@ function MainTabNavigator() {
   );
 }
 
-/**
- * NOVO: O App agora usa o StackNavigator como principal
- */
 export default function App() {
   return (
     <NavigationContainer>
       <Stack.Navigator
         screenOptions={{
-          // Aplicar o header verde escuro em todas as telas da pilha
           headerStyle: {
             backgroundColor: cores.verdeEscuro,
           },
-          headerTintColor: cores.branco, // Cor do botão "voltar"
+          headerTintColor: cores.branco,
           headerTitleStyle: {
             color: cores.branco,
           },
         }}
       >
-        {/* Rota 1: As abas */}
         <Stack.Screen 
           name="MainTabs" 
           component={MainTabNavigator} 
-          // Esconder o header da Stack na tela de abas (pois as abas já têm o seu)
           options={{ headerShown: false }} 
         />
-        {/* Rota 2: A tela de Edição */}
         <Stack.Screen 
           name="EditarProduto" 
           component={EdicaoScreen} 
-          options={{ title: 'Editar Produto' }} // Título no header
+          options={{ title: 'Editar Produto' }}
+        />
+        
+        {/* --- MUDANÇA 6: Adicionar a tela que faltava --- */}
+        <Stack.Screen 
+          name="EditarSaida" 
+          component={EditarSaidaScreen} 
+          options={{ title: 'Editar Registro de Saída' }} 
         />
       </Stack.Navigator>
     </NavigationContainer>
