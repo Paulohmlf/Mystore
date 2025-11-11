@@ -1,50 +1,91 @@
-# Welcome to your Expo app 👋
+# 📦 Controle de Estoque - App Expo React Native
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Um aplicativo móvel simples e eficiente para **gerenciamento de estoque**, desenvolvido com **Expo** e **React Native**.  
+Permite registrar entradas e saídas de produtos, acompanhar lucros e gerar relatórios detalhados do inventário.
 
-## Get started
+---
 
-1. Install dependencies
+## 🚀 Funcionalidades
 
-   ```bash
-   npm install
-   ```
+✅ Registro de **entradas** de produtos  
+✅ Registro de **saídas** (vendas ou retiradas)  
+✅ **Cálculo automático de lucros** com base em entradas e saídas  
+✅ **Edição de registros** de saída  
+✅ **Relatórios detalhados** para análise do estoque  
+✅ **Armazenamento local** com AsyncStorage (sem necessidade de conexão com internet)
 
-2. Start the app
+---
 
-   ```bash
-   npx expo start
-   ```
+## 🛠️ Tecnologias Utilizadas
 
-In the output, you'll find options to open the app in a
+- **React Native (Expo)**
+- **TypeScript**
+- **AsyncStorage** → persistência local
+- **ESLint** → padronização de código
+- **Babel** e **Metro** → bundling e compatibilidade
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+---
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## 🖥️ Telas do Aplicativo
 
-## Get a fresh project
+| Tela | Descrição |
+|------|------------|
+| **EntradaScreen** | Registro de novas entradas de produtos |
+| **SaidaScreen** | Registro de saídas (vendas/retiradas) |
+| **EditarSaidaScreen** | Edição de registros de saída |
+| **RelatorioScreen** | Visualização e análise de relatórios |
+| **EdicaoScreen** | Edição geral de registros |
 
-When you're ready, run:
+---
+
+## ⚙️ Como Executar o Projeto
 
 ```bash
-npm run reset-project
+# 1️⃣ Clone o repositório
+git clone <URL-DO-REPOSITORIO>
+cd <NOME-DO-REPOSITORIO>
+
+# 2️⃣ Instale as dependências
+npm install
+
+# 3️⃣ Execute o app em modo de desenvolvimento
+npm start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+📱 Depois, abra o app com o **Expo Go** no seu smartphone ou use um **emulador Android/iOS**.
 
-## Learn more
+---
 
-To learn more about developing your project with Expo, look at the following resources:
+## 🧩 Estrutura do Projeto
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```
+📁 src/
+ ┣ 📄 App.tsx                 → Arquivo principal e navegação
+ ┣ 📄 EntradaScreen.tsx       → Tela de registro de entradas
+ ┣ 📄 SaidaScreen.tsx         → Tela de registro de saídas
+ ┣ 📄 EditarSaidaScreen.tsx   → Tela de edição de saídas
+ ┣ 📄 RelatorioScreen.tsx     → Tela de relatórios
+ ┣ 📄 EdicaoScreen.tsx        → Tela de edição geral
+ ┣ 📄 storage.ts              → Funções para manipular o AsyncStorage
+📄 babel.config.js
+📄 eslint.config.js
+📄 app.json
+```
 
-## Join the community
+---
 
-Join our community of developers creating universal apps.
+## 🤝 Contribuições
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+Contribuições são **muito bem-vindas**!  
+- Abra uma **issue** para relatar bugs ou sugerir melhorias.  
+- Envie um **pull request** com suas alterações.
+
+---
+
+## 📜 Licença
+
+Este projeto está sob a licença **MIT**.
+
+---
+
+👨‍💻 Desenvolvido com ❤️ por **Paulo Henrique**
