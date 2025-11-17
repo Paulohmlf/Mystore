@@ -6,6 +6,7 @@
   <component name="ChangeListManager">
     <list default="true" id="f8b33990-c993-486a-b3f3-1138cbb37445" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/screens/RelatorioScreen.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/screens/RelatorioScreen.tsx" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

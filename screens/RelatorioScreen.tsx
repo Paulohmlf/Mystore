@@ -6,9 +6,9 @@ import {
   Database,
   DownloadSimple,
   Funnel,
-  MagnifyingGlass, // --- MUDANÇA ---
+  MagnifyingGlass,
 } from 'phosphor-react-native';
-import React, { useEffect, useState } from 'react'; // React.useMemo será usado
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,7 +18,7 @@ import {
   SafeAreaView,
   StyleSheet,
   Text,
-  TextInput, // --- MUDANÇA ---
+  TextInput,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
@@ -41,28 +41,41 @@ const cores = {
   placeholder: '#A3BFAA',
 };
 
-// Constantes e Interfaces (sem mudanças)
+// Constantes (sem mudanças)
 const meses = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 ];
 const TODOS_OS_MESES = -1; 
+
+// --- MUDANÇA 1: Interface do Relatório ---
+// Adicionamos o campo 'dataUltimaVenda'
 interface ItemRelatorio {
-  id: string; nome: string; precoCompra: number; totalEntrada: number;
-  totalVendido: number; estoqueDisponivel: number; lucroTotal: number;
+  id: string; 
+  nome: string; 
+  precoCompra: number;
+  totalEntrada: number;
+  totalVendidoPeriodo: number;
+  estoqueDisponivel: number;
+  lucroPeriodo: number;
+  dataUltimaVenda: string | null; // <-- CAMPO ADICIONADO
 }
+// --- Fim da Mudança 1 ---
+
 interface ChartData {
+  // (Sem mudanças)
   labels: string[];
   datasets: [{ data: number[]; color: (opacity?: number) => string; strokeWidth: number; },
              { data: number[]; color: (opacity?: number) => string; strokeWidth: number; }];
   legend: string[];
 }
 interface ModalItem {
+  // (Sem mudanças)
   label: string;
   value: any;
 }
 
-// Funções de cálculo (calcularLucro, prepararDadosGrafico, gerarHTMLRelatorio)
+// Funções de cálculo (calcularLucro, prepararDadosGrafico)
 // (Exatamente como no código anterior, sem mudanças)
 const calcularLucro = (saidas: Saida[], produtos: Produto[]): number => {
   const mapaProdutos = new Map(produtos.map(p => [p.id, p]));
@@ -76,6 +89,7 @@ const calcularLucro = (saidas: Saida[], produtos: Produto[]): number => {
   return lucroTotal;
 };
 const prepararDadosGrafico = (saidas: Saida[], produtos: Produto[]): ChartData | null => {
+  // (Copiado, sem mudanças)
   if (!saidas || saidas.length === 0 || !produtos || produtos.length === 0) {
     return null; 
   }
@@ -117,21 +131,24 @@ const prepararDadosGrafico = (saidas: Saida[], produtos: Produto[]): ChartData |
     legend: ['Gasto (Acumulado)', 'Recebido (Acumulado)'],
   };
 };
+
+// gerarHTMLRelatorio (Sem mudanças por enquanto, mas poderia ser atualizado)
 const gerarHTMLRelatorio = (dados: ItemRelatorio[], lucroPeriodo: number, filtroDesc: string): string => {
   // (Copiado, sem mudanças)
   const linhasTabela = dados.map(item => `
     <tr>
       <td>${item.nome}</td>
       <td>${item.totalEntrada} un.</td>
-      <td>${item.totalVendido} un.</td>
+      <td>${item.totalVendidoPeriodo} un.</td>
       <td>${item.estoqueDisponivel} un.</td>
-      <td>R$ ${item.lucroTotal.toFixed(2)}</td>
+      <td>R$ ${item.lucroPeriodo.toFixed(2)}</td>
     </tr>
   `).join(''); 
   return `
     <html>
       <head>
         <style>
+          /* (Estilos CSS sem mudanças) */
           body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: ${cores.begeFundo}; color: ${cores.texto}; }
           h1, h2 { color: ${cores.verdeEscuro}; border-bottom: 2px solid ${cores.verdeClaro}; padding-bottom: 5px; }
           .filtro { color: ${cores.verdeMedio}; font-size: 16px; font-style: italic; margin-bottom: 15px; }
@@ -152,15 +169,16 @@ const gerarHTMLRelatorio = (dados: ItemRelatorio[], lucroPeriodo: number, filtro
           <h2>Lucro Total (Período)</h2>
           <p>R$ ${lucroPeriodo.toFixed(2)}</p>
         </div>
-        <h2>Relatório Detalhado de Estoque (Visão Atual)</h2>
+        
+        <h2>Desempenho por Produto (Visão Híbrida)</h2>
         <table>
           <thead>
             <tr>
               <th>Produto</th>
               <th>Entrada (Total)</th>
-              <th>Saída (Total)</th>
+              <th>Saída (Período)</th>
               <th>Estoque (Atual)</th>
-              <th>Lucro (Total)</th>
+              <th>Lucro (Período)</th>
             </tr>
           </thead>
           <tbody>
@@ -171,40 +189,29 @@ const gerarHTMLRelatorio = (dados: ItemRelatorio[], lucroPeriodo: number, filtro
     </html>
   `;
 };
-// --- Fim das Funções de Cálculo ---
 
 
 export default function RelatorioScreen() {
-  // Dados brutos (sem mudanças)
+  // Estados (sem mudanças)
   const [allProdutos, setAllProdutos] = useState<Produto[]>([]);
   const [allSaidas, setAllSaidas] = useState<Saida[]>([]);
-  
-  // Dados processados (sem mudanças)
   const [dadosRelatorio, setDadosRelatorio] = useState<ItemRelatorio[]>([]);
   const [lucroPeriodo, setLucroPeriodo] = useState(0);
   const [dadosGrafico, setDadosGrafico] = useState<ChartData | null>(null);
-  
-  // Estados de UI e Filtro (sem mudanças)
   const [isLoading, setIsLoading] = useState(true);
   const [isExportando, setIsExportando] = useState(false);
   const [anosDisponiveis, setAnosDisponiveis] = useState<string[]>([]);
   const [filtroAno, setFiltroAno] = useState<string | null>(null);
   const [filtroMes, setFiltroMes] = useState<number>(TODOS_OS_MESES);
-  
-  // Estados do Modal (sem mudanças)
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [pickerMode, setPickerMode] = useState<'ano' | 'mes' | null>(null);
   const [modalData, setModalData] = useState<ModalItem[]>([]);
-
-  // --- MUDANÇA: Estado para a Busca ---
   const [searchTerm, setSearchTerm] = useState('');
-  // --- Fim da Mudança ---
   
   const isFocused = useIsFocused();
   const screenWidth = Dimensions.get('window').width;
 
-  // Efeitos e Funções (carregarDadosBrutos, processarRelatorio, getDescricaoFiltro, handleExportarPDF, openPicker, onSelectItem)
-  // (Exatamente como no código anterior, sem mudanças)
+  // Efeitos (sem mudanças)
   useEffect(() => {
     if (isFocused) {
       carregarDadosBrutos();
@@ -218,6 +225,7 @@ export default function RelatorioScreen() {
   }, [allProdutos, allSaidas, filtroAno, filtroMes, isLoading]);
 
   const carregarDadosBrutos = async () => {
+    // (Copiado, sem mudanças)
     setIsLoading(true);
     const produtos = await getProdutos();
     const saidas = await getSaidas();
@@ -229,7 +237,9 @@ export default function RelatorioScreen() {
     setIsLoading(false); 
   };
 
+  // --- MUDANÇA 2: Lógica principal de processamento ---
   const processarRelatorio = () => {
+    // 1. Aplicar filtros (sem mudanças)
     const saidasFiltradas = allSaidas.filter(s => {
       const dataVenda = new Date(s.data);
       const anoMatch = !filtroAno || dataVenda.getFullYear().toString() === filtroAno;
@@ -237,32 +247,56 @@ export default function RelatorioScreen() {
       return anoMatch && mesMatch;
     });
 
+    // 2. Calcular componentes financeiros (sem mudanças)
     const lucroFiltrado = calcularLucro(saidasFiltradas, allProdutos);
     setLucroPeriodo(lucroFiltrado);
-    
     const dadosParaGrafico = prepararDadosGrafico(saidasFiltradas, allProdutos);
     setDadosGrafico(dadosParaGrafico);
 
+    // 3. Calcular relatório de estoque (HÍBRIDO)
     const relatorio = allProdutos.map(produto => {
-      const saidasDoProduto = allSaidas.filter(s => s.produtoId === produto.id);
-      const totalVendido = saidasDoProduto.reduce((soma, saida) => soma + saida.quantidade, 0);
-      const lucroTotalProduto = calcularLucro(saidasDoProduto, [produto]);
-      const estoqueDisponivel = produto.quantidade - totalVendido;
+      // Cálculos GLOBAIS (sem mudanças)
+      const saidasTotaisDoProduto = allSaidas.filter(s => s.produtoId === produto.id);
+      const totalVendidoGlobal = saidasTotaisDoProduto.reduce((soma, saida) => soma + saida.quantidade, 0);
+      const estoqueDisponivel = produto.quantidade - totalVendidoGlobal;
+
+      // Cálculos FILTRADOS (sem mudanças)
+      const saidasFiltradasDoProduto = saidasFiltradas.filter(s => s.produtoId === produto.id);
+      const totalVendidoPeriodo = saidasFiltradasDoProduto.reduce((soma, saida) => soma + saida.quantidade, 0);
+      const lucroPeriodo = calcularLucro(saidasFiltradasDoProduto, [produto]);
+      
+      // --- CÁLCULO ADICIONADO ---
+      // Acha a data da última venda (global, não filtrada)
+      let dataUltimaVenda: string | null = null;
+      if (saidasTotaisDoProduto.length > 0) {
+          // Ordena pelas datas mais recentes primeiro
+          saidasTotaisDoProduto.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+          dataUltimaVenda = saidasTotaisDoProduto[0].data; // Pega a primeira (mais recente)
+      }
+      // --- FIM DO CÁLCULO ADICIONADO ---
+
       return {
-        id: produto.id, nome: produto.nome, precoCompra: produto.precoCompra,
-        totalEntrada: produto.quantidade, totalVendido: totalVendido,
-        estoqueDisponivel: estoqueDisponivel, lucroTotal: lucroTotalProduto,
+        id: produto.id,
+        nome: produto.nome,
+        precoCompra: produto.precoCompra,
+        totalEntrada: produto.quantidade,
+        totalVendidoPeriodo: totalVendidoPeriodo,
+        estoqueDisponivel: estoqueDisponivel,
+        lucroPeriodo: lucroPeriodo,
+        dataUltimaVenda: dataUltimaVenda, // <-- CAMPO ADICIONADO
       };
     });
     setDadosRelatorio(relatorio);
   };
+  // --- Fim da Mudança 2 ---
   
+  // Funções (getDescricaoFiltro, handleExportarPDF, openPicker, onSelectItem)
+  // (Exatamente como no código anterior, sem mudanças)
   const getDescricaoFiltro = () => {
     const ano = filtroAno || "Todos";
     const mes = filtroMes === TODOS_OS_MESES ? "Todos" : meses[filtroMes];
     return `Ano: ${ano} | Mês: ${mes}`;
   };
-
   const handleExportarPDF = async () => {
     if (isExportando) return; 
     setIsExportando(true);
@@ -284,7 +318,6 @@ export default function RelatorioScreen() {
       setIsExportando(false); 
     }
   };
-
   const openPicker = (mode: 'ano' | 'mes') => {
     setPickerMode(mode);
     if (mode === 'ano') {
@@ -296,7 +329,6 @@ export default function RelatorioScreen() {
     }
     setIsModalVisible(true);
   };
-
   const onSelectItem = (item: ModalItem) => {
     if (pickerMode === 'ano') {
       setFiltroAno(item.value);
@@ -309,32 +341,58 @@ export default function RelatorioScreen() {
     setIsModalVisible(false);
     setPickerMode(null);
   };
+  // --- Fim das Funções ---
 
-  // renderItem (Sem mudanças)
+
+  // --- MUDANÇA 3: Render Item (Lista) ---
+  // Atualiza para exibir a data da última venda
   const renderItem = ({ item }: { item: ItemRelatorio }) => (
     <View style={styles.itemContainer}>
-      <Text style={styles.itemNome}>{item.nome}</Text>
+      
+      {/* Container para o Nome e Data */}
+      <View style={styles.itemNomeContainer}>
+        <Text style={styles.itemNome}>{item.nome}</Text>
+        
+        {/* Mostra a Data da Última Venda (Global) */}
+        {item.dataUltimaVenda ? (
+            <Text style={styles.itemData}>
+                Última Venda: {new Date(item.dataUltimaVenda).toLocaleDateString('pt-BR')}
+            </Text>
+        ) : (
+            <Text style={styles.itemData}>
+                Nenhuma venda registrada
+            </Text>
+        )}
+        {/* Fim da adição da data */}
+
+      </View>
+      
+      {/* Detalhes (sem mudanças, mas os valores são do período) */}
       <View style={styles.detalheRow}>
         <Text style={styles.detalheLabel}>Entrada (Total):</Text>
         <Text style={styles.detalheValor}>{item.totalEntrada} un.</Text>
       </View>
       <View style={styles.detalheRow}>
-        <Text style={styles.detalheLabel}>Saída (Total):</Text>
-        <Text style={styles.detalheValor}>{item.totalVendido} un.</Text>
+        <Text style={styles.detalheLabel}>Saída (Período):</Text>
+        <Text style={styles.detalheValor}>{item.totalVendidoPeriodo} un.</Text>
       </View>
       <View style={styles.detalheRow}>
         <Text style={styles.detalheLabel}>Estoque Atual:</Text>
         <Text style={[styles.detalheValor, styles.estoqueValor]}>{item.estoqueDisponivel} un.</Text>
       </View>
       <View style={[styles.detalheRow, styles.lucroContainer]}>
-        <Text style={styles.lucroLabel}>Lucro (Total):</Text>
-        <Text style={styles.lucroValor}>R$ {item.lucroTotal.toFixed(2)}</Text>
+        <Text style={styles.lucroLabel}>Lucro (Período):</Text>
+        <Text style={styles.lucroValor}>
+          R$ {item.lucroPeriodo.toFixed(2)}
+        </Text>
       </View>
     </View>
   );
+  // --- Fim da Mudança 3 ---
 
   // renderChart (Sem mudanças)
   const renderChart = () => {
+    // (Copiado, sem mudanças)
     if (!dadosGrafico && !isLoading) {
         return (
             <View style={styles.emptyContainer}>
@@ -362,17 +420,16 @@ export default function RelatorioScreen() {
     );
   };
 
-  // --- MUDANÇA: Lógica de filtragem da lista ---
+  // Lógica de filtro da busca (Sem mudanças)
   const filteredDadosRelatorio = React.useMemo(() => {
+    // (Copiado, sem mudanças)
     if (!searchTerm.trim()) {
-      return dadosRelatorio; // Retorna todos se a busca estiver vazia
+      return dadosRelatorio;
     }
-    // Retorna apenas os itens cujo nome inclui o termo de busca (sem case sensitive)
     return dadosRelatorio.filter(item =>
       item.nome.toLowerCase().includes(searchTerm.toLowerCase())
     );
-  }, [dadosRelatorio, searchTerm]); // Recalcula se 'dadosRelatorio' ou 'searchTerm' mudar
-  // --- Fim da Mudança ---
+  }, [dadosRelatorio, searchTerm]);
 
 
   return (
@@ -381,15 +438,15 @@ export default function RelatorioScreen() {
         <ActivityIndicator size="large" color={cores.verdeEscuro} style={{ marginTop: 50 }} />
       ) : (
         <FlatList
-          // --- MUDANÇA: Usa os dados filtrados ---
           data={filteredDadosRelatorio}
-          // --- Fim da Mudança ---
           renderItem={renderItem}
           keyExtractor={item => item.id}
           style={styles.lista}
           ListHeaderComponent={
             <>
-              {/* Filtro de Data (sem mudanças) */}
+              {/* Todas as seções do Header (sem mudanças) */}
+              
+              {/* Filtro de Data */}
               <View style={styles.filtroContainer}>
                 <View style={styles.filtroHeader}>
                   <Funnel size={18} color={cores.verdeEscuro} weight="bold" />
@@ -416,7 +473,7 @@ export default function RelatorioScreen() {
                 </View>
               </View>
 
-              {/* Card de Resumo (sem mudanças) */}
+              {/* Card de Resumo */}
               <View style={styles.resumoGeralCard}>
                 <View>
                   <Text style={styles.resumoGeralLabel}>Lucro Total (Período)</Text>
@@ -425,7 +482,7 @@ export default function RelatorioScreen() {
                 <ChartLineUp size={40} color={cores.branco} weight="bold" />
               </View>
 
-              {/* Botão de Exportar (sem mudanças) */}
+              {/* Botão de Exportar */}
               <TouchableOpacity 
                 style={styles.botaoExportar}
                 onPress={handleExportarPDF}
@@ -437,16 +494,16 @@ export default function RelatorioScreen() {
                 </Text>
               </TouchableOpacity>
 
-              {/* Gráfico (sem mudanças) */}
+              {/* Gráfico */}
               {renderChart()}
 
-              {/* Títulos da Lista (sem mudanças) */}
-              <Text style={styles.listaTitulo}>Relatório Detalhado de Estoque (Visão Atual)</Text>
+              {/* Títulos da Lista */}
+              <Text style={styles.listaTitulo}>Desempenho por Produto (Visão Híbrida)</Text>
               <Text style={styles.listaSubtitulo}>
-                Esta lista mostra o status TOTAL do estoque (sempre atual) e não é afetada pelos filtros de data.
+                Mostra 'Saída' e 'Lucro' do período filtrado. 'Entrada' e 'Estoque' são sempre totais.
               </Text>
 
-              {/* --- MUDANÇA: Barra de Busca --- */}
+              {/* Barra de Busca */}
               <View style={styles.searchContainer}>
                 <MagnifyingGlass size={20} color={cores.placeholder} style={styles.searchIcon} />
                 <TextInput
@@ -457,19 +514,17 @@ export default function RelatorioScreen() {
                   onChangeText={setSearchTerm}
                 />
               </View>
-              {/* --- Fim da Mudança --- */}
             </>
           }
           ListEmptyComponent={
+            // (Sem mudanças)
             <View style={styles.emptyContainer}>
                 <Database size={32} color={cores.verdeClaro} />
-                {/* --- MUDANÇA: Mensagem de "lista vazia" dinâmica --- */}
                 <Text style={styles.emptyText}>
                   {searchTerm 
                     ? 'Nenhum produto encontrado.' 
                     : 'Nenhum produto cadastrado.'}
                 </Text>
-                {/* --- Fim da Mudança --- */}
             </View>
           }
         />
@@ -511,6 +566,7 @@ export default function RelatorioScreen() {
 
 // Configuração do Gráfico (sem mudanças)
 const chartConfig = {
+  // (Copiado, sem mudanças)
   backgroundColor: cores.branco,
   backgroundGradientFrom: cores.branco,
   backgroundGradientTo: cores.branco,
@@ -522,8 +578,10 @@ const chartConfig = {
 };
 
 
-// Estilos (ADIÇÃO da Barra de Busca)
+// --- MUDANÇA 4: Estilos ---
+// Adicionamos 'itemNomeContainer' e 'itemData'
 const styles = StyleSheet.create({
+  // (Todos os estilos anteriores copiados)
   container: {
     flex: 1,
     backgroundColor: cores.begeFundo,
@@ -683,7 +741,6 @@ const styles = StyleSheet.create({
       marginBottom: 10,
       marginTop: -4,
   },
-  // --- MUDANÇA: Estilos da Barra de Busca ---
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -694,7 +751,7 @@ const styles = StyleSheet.create({
     borderColor: cores.verdeClaro,
     paddingHorizontal: 10,
     marginTop: 10,
-    marginBottom: 10, // Adiciona espaço antes da lista
+    marginBottom: 10,
     elevation: 1,
   },
   searchIcon: {
@@ -706,7 +763,6 @@ const styles = StyleSheet.create({
       fontSize: 16,
       color: cores.texto,
   },
-  // --- FIM DA MUDANÇA ---
   lista: {
     flex: 1,
   },
@@ -718,15 +774,26 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     elevation: 2,
   },
-  itemNome: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: cores.texto,
+  // --- ESTILOS ADICIONADOS/MODIFICADOS ---
+  itemNomeContainer: {
     marginBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: cores.verdeClaro,
     paddingBottom: 8,
   },
+  itemNome: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: cores.texto,
+    // (propriedades de borda e margem movidas para 'itemNomeContainer')
+  },
+  itemData: {
+      fontSize: 13,
+      fontStyle: 'italic',
+      color: cores.verdeMedio,
+      marginTop: 4, // Adiciona espaço do nome
+  },
+  // --- FIM DOS ESTILOS ADICIONADOS/MODIFICADOS ---
   detalheRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
