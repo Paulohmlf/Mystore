@@ -1,16 +1,19 @@
-import { Pencil, Trash } from 'phosphor-react-native';
+// Arquivo: EntradaScreen.tsx
+import { Pencil, PlusCircle, Trash } from 'phosphor-react-native'; // --- MUDANÇA: Adicionado 'PlusCircle' ---
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Button,
   FlatList,
   Keyboard,
-  SafeAreaView, // SafeAreaView
+  Modal, // --- MUDANÇA: Adicionado 'Modal' ---
+  SafeAreaView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  TouchableWithoutFeedback, // --- MUDANÇA: Adicionado ---
+  View,
 } from 'react-native';
 
 // Importar hooks de navegação
@@ -20,7 +23,7 @@ import { RootStackParamList } from '../App'; // Tipos do App.tsx
 
 import { getProdutos, Produto, salvarProdutos } from '../services/storage';
 
-// Sua nova paleta de cores
+// Sua paleta de cores
 const cores = {
   verdeEscuro: '#325E54',
   verdeMedio: '#4A7969',
@@ -32,7 +35,7 @@ const cores = {
   danger: '#D9534F'
 };
 
-// Definir o tipo da navegação
+// Tipo da navegação (sem mudanças)
 type EntradaScreenNavigationProp = StackNavigationProp<RootStackParamList, 'EditarProduto'>;
 
 export default function EntradaScreen() {
@@ -42,12 +45,15 @@ export default function EntradaScreen() {
 
   const [produtos, setProdutos] = useState<Produto[]>([]);
   
+  // --- MUDANÇA: Estados para o Modal de Adicionar Estoque ---
+  const [isModalVisible, setModalVisible] = useState(false);
+  const [produtoSelecionado, setProdutoSelecionado] = useState<Produto | null>(null);
+  const [quantidadeAdicionar, setQuantidadeAdicionar] = useState('');
+  // --- Fim da Mudança ---
+
   const isFocused = useIsFocused();
-  
-  // Inicializar o hook de navegação
   const navigation = useNavigation<EntradaScreenNavigationProp>();
 
-  // Carregar dados quando a tela abrir
   useEffect(() => {
     if (isFocused) {
       carregarDados();
@@ -59,8 +65,9 @@ export default function EntradaScreen() {
     setProdutos(produtosSalvos);
   };
 
-  // Salvar Produto
+  // Salvar NOVO Produto
   const handleSalvarProduto = async () => {
+    // (Validações sem mudanças)
     if (!nome.trim() || !precoCompra.trim() || !quantidade.trim()) {
       Alert.alert('Erro', 'Por favor, preencha todos os campos.');
       return;
@@ -73,16 +80,18 @@ export default function EntradaScreen() {
       return;
     }
 
+    // --- MUDANÇA: Adiciona 'dataEntrada' ---
     const novoProduto: Produto = {
       id: String(new Date().getTime()),
       nome: nome.trim(),
       precoCompra: precoNum,
       quantidade: qtdNum,
+      dataEntrada: new Date().toISOString(), // <-- ADICIONADO
     };
+    // --- Fim da Mudança ---
 
     const novaLista = [novoProduto, ...produtos];
     setProdutos(novaLista);
-    
     await salvarProdutos(novaLista);
 
     setNome('');
@@ -91,12 +100,54 @@ export default function EntradaScreen() {
     Keyboard.dismiss();
   };
 
-  // handleEditar (atualizado para navegar)
+  // --- MUDANÇA: Funções para o Modal ---
+  const handleAbrirModal = (produto: Produto) => {
+    setProdutoSelecionado(produto);
+    setQuantidadeAdicionar('');
+    setModalVisible(true);
+  };
+
+  const handleConfirmarAdicionarEstoque = async () => {
+    if (!produtoSelecionado || !quantidadeAdicionar.trim()) {
+      Alert.alert('Erro', 'Digite a quantidade a adicionar.');
+      return;
+    }
+
+    const qtdNum = parseInt(quantidadeAdicionar, 10);
+    if (isNaN(qtdNum) || qtdNum <= 0) {
+      Alert.alert('Erro', 'A quantidade deve ser um número positivo.');
+      return;
+    }
+
+    // Encontra o produto e atualiza a quantidade
+    const novaLista = produtos.map(p => {
+      if (p.id === produtoSelecionado.id) {
+        return {
+          ...p,
+          quantidade: p.quantidade + qtdNum,
+          // Nota: Não atualizamos a 'dataEntrada' original
+        };
+      }
+      return p;
+    });
+
+    setProdutos(novaLista);
+    await salvarProdutos(novaLista);
+
+    // Fecha o modal e limpa os estados
+    setModalVisible(false);
+    setProdutoSelecionado(null);
+    setQuantidadeAdicionar('');
+    Keyboard.dismiss();
+  };
+  // --- Fim da Mudança ---
+
+  // handleEditar (sem mudanças)
   const handleEditar = (id: string) => {
     navigation.navigate('EditarProduto', { produtoId: id });
   };
 
-  // handleExcluir (a sua lógica que já estava correta)
+  // handleExcluir (sem mudanças)
   const handleExcluir = (id: string) => {
     Alert.alert(
       'Confirmar Exclusão',
@@ -116,7 +167,8 @@ export default function EntradaScreen() {
     );
   };
 
-  // Render Item
+  // --- MUDANÇA: Render Item ---
+  // Adiciona a 'dataEntrada' e o novo botão '+'
   const renderItem = ({ item }: { item: Produto }) => (
     <View style={styles.itemContainer}>
       <View style={styles.itemInfo}>
@@ -124,22 +176,35 @@ export default function EntradaScreen() {
         <Text style={styles.itemDetalhes}>
           Preço: R$ {item.precoCompra.toFixed(2)} | Qtd: {item.quantidade}
         </Text>
+        {/* Mostra a data de entrada */}
+        {item.dataEntrada && (
+          <Text style={styles.itemData}>
+            Entrada: {new Date(item.dataEntrada).toLocaleDateString('pt-BR')}
+          </Text>
+        )}
       </View>
       <View style={styles.itemAcoes}>
+        {/* Botão de Adicionar Estoque */}
+        <TouchableOpacity onPress={() => handleAbrirModal(item)} style={styles.acaoButton}>
+          <PlusCircle size={22} color={cores.verdeEscuro} weight="fill" />
+        </TouchableOpacity>
+        {/* Botão Editar */}
         <TouchableOpacity onPress={() => handleEditar(item.id)} style={styles.acaoButton}>
           <Pencil size={22} color={cores.verdeMedio} />
         </TouchableOpacity>
+        {/* Botão Excluir */}
         <TouchableOpacity onPress={() => handleExcluir(item.id)} style={styles.acaoButton}>
           <Trash size={22} color={cores.danger} />
         </TouchableOpacity>
       </View>
     </View>
   );
+  // --- Fim da Mudança ---
 
   // Return
   return (
     <SafeAreaView style={styles.container}>
-      {/* Formulário de Cadastro */}
+      {/* Formulário de Cadastro (sem mudanças) */}
       <View style={styles.formContainer}>
         <TextInput
           style={styles.input}
@@ -166,10 +231,10 @@ export default function EntradaScreen() {
             placeholderTextColor={cores.placeholder}
           />
         </View>
-        <Button title="Salvar Produto" onPress={handleSalvarProduto} color={cores.verdeEscuro} />
+        <Button title="Salvar Novo Produto" onPress={handleSalvarProduto} color={cores.verdeEscuro} />
       </View>
 
-      {/* Lista de Produtos Cadastrados */}
+      {/* Lista de Produtos Cadastrados (sem mudanças) */}
       <FlatList
         data={produtos}
         renderItem={renderItem}
@@ -177,11 +242,55 @@ export default function EntradaScreen() {
         style={styles.lista}
         ListHeaderComponent={<Text style={styles.listaTitulo}>Produtos Cadastrados</Text>}
       />
+
+      {/* --- MUDANÇA: Modal de Adicionar Estoque --- */}
+      <Modal
+        transparent={true}
+        visible={isModalVisible}
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setModalVisible(false)}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>Adicionar Estoque</Text>
+                
+                <Text style={styles.modalProdutoNome}>
+                  Produto: {produtoSelecionado?.nome}
+                </Text>
+                <Text style={styles.modalProdutoQtd}>
+                  Qtd Atual: {produtoSelecionado?.quantidade}
+                </Text>
+
+                <TextInput
+                  style={styles.inputModal}
+                  placeholder="Quantidade a Adicionar"
+                  value={quantidadeAdicionar}
+                  onChangeText={setQuantidadeAdicionar}
+                  keyboardType="number-pad"
+                  placeholderTextColor={cores.placeholder}
+                  autoFocus={true} // Foca no input ao abrir
+                />
+                
+                <Button 
+                  title="Confirmar" 
+                  onPress={handleConfirmarAdicionarEstoque} 
+                  color={cores.verdeEscuro} 
+                />
+                
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+      {/* --- Fim da Mudança --- */}
+
     </SafeAreaView>
   );
-} // <--- Fim do componente EntradaScreen
+} 
 
-// Estilos
+// Estilos (Com adição dos estilos do Modal)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -244,7 +353,16 @@ const styles = StyleSheet.create({
   itemDetalhes: {
     fontSize: 14,
     color: cores.verdeMedio,
+    marginTop: 2,
   },
+  // --- MUDANÇA: Estilo para a Data ---
+  itemData: {
+      fontSize: 12,
+      color: cores.placeholder,
+      marginTop: 4,
+      fontStyle: 'italic',
+  },
+  // --- Fim da Mudança ---
   itemAcoes: {
     flexDirection: 'row',
   },
@@ -252,4 +370,50 @@ const styles = StyleSheet.create({
     marginLeft: 16,
     padding: 4,
   },
-}); 
+
+  // --- MUDANÇA: Estilos do Modal ---
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: cores.branco,
+    borderRadius: 12,
+    padding: 20,
+    width: '100%',
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: cores.texto,
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  modalProdutoNome: {
+    fontSize: 16,
+    color: cores.texto,
+    textAlign: 'center',
+  },
+  modalProdutoQtd: {
+    fontSize: 14,
+    color: cores.verdeMedio,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  inputModal: {
+    height: 44,
+    backgroundColor: cores.begeFundo, // Fundo bege para diferenciar
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    marginBottom: 16, // Aumentado
+    fontSize: 16,
+    color: cores.texto,
+    borderWidth: 1,
+    borderColor: cores.verdeClaro,
+    textAlign: 'center', // Centraliza o número
+  },
+});

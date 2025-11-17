@@ -12,6 +12,7 @@ export interface Produto {
   nome: string;
   precoCompra: number;
   quantidade: number;
+  dataEntrada: string;
 }
 
 // Tipo para Saída (o mesmo da SaidaScreen)
