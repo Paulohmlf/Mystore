@@ -1,26 +1,27 @@
 // Arquivo: SaidaScreen.tsx
 import { useIsFocused } from '@react-navigation/native';
-import { Pencil, Trash } from 'phosphor-react-native';
+import { Pencil, Trash, XCircle } from 'phosphor-react-native'; // --- MUDANÇA: Adicionado XCircle ---
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
   FlatList,
   Keyboard,
+  Modal, // --- MUDANÇA: Adicionado Modal ---
   SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  TouchableWithoutFeedback, // --- MUDANÇA: Adicionado ---
+  View,
 } from 'react-native';
 
-// --- MUDANÇA 1: Importar hooks de navegação ---
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../App'; // Importa os tipos do App.tsx
+import { RootStackParamList } from '../App';
 
-// Importar 'Produto' e 'Saida' com o campo 'data'
+// Importa os tipos. Assumindo que 'Produto' AGORA TEM 'dataEntrada'
 import { Produto, Saida, getProdutos, getSaidas, salvarSaidas } from '../services/storage';
 
 const cores = {
@@ -34,23 +35,41 @@ const cores = {
   danger: '#D9534F'
 };
 
+// Interface para o produto com estoque (sem mudanças)
 interface ProdutoComEstoque extends Produto {
   estoqueDisponivel: number;
 }
 
-// --- MUDANÇA 2: Definir o tipo da propriedade de navegação ---
+// --- MUDANÇA: Interface para o produto agrupado ---
+interface ProdutoAgrupado {
+  nome: string;
+  estoqueTotal: number;
+}
+// --- Fim da Mudança ---
+
 type SaidaScreenNavigationProp = StackNavigationProp<RootStackParamList, 'EditarSaida'>;
 
 export default function SaidaScreen() {
+  // Lista de produtos brutos (lotes) com estoque
   const [produtosDisponiveis, setProdutosDisponiveis] = useState<ProdutoComEstoque[]>([]);
+  // Lista de produtos agrupados por nome
+  const [produtosAgrupados, setProdutosAgrupados] = useState<ProdutoAgrupado[]>([]);
+  
   const [saidas, setSaidas] = useState<Saida[]>([]);
+  
+  // O 'produtoSelecionado' agora é um lote específico
   const [produtoSelecionado, setProdutoSelecionado] = useState<ProdutoComEstoque | null>(null);
+  
   const [quantidadeSaida, setQuantidadeSaida] = useState('');
   const [precoVenda, setPrecoVenda] = useState('');
   const isFocused = useIsFocused();
-
-  // --- MUDANÇA 3: Inicializar o hook de navegação ---
   const navigation = useNavigation<SaidaScreenNavigationProp>();
+
+  // --- MUDANÇA: Estados do Modal de Seleção de Lote ---
+  const [isModalVisible, setModalVisible] = useState(false);
+  const [lotesParaSelecionar, setLotesParaSelecionar] = useState<ProdutoComEstoque[]>([]);
+  const [nomeModal, setNomeModal] = useState('');
+  // --- Fim da Mudança ---
 
   useEffect(() => {
     if (isFocused) {
@@ -59,11 +78,11 @@ export default function SaidaScreen() {
   }, [isFocused]);
 
   const carregarDados = async () => {
-    // (Lógica sem mudanças)
     const produtosSalvos = await getProdutos();
     const saidasSalvas = await getSaidas();
     setSaidas(saidasSalvas);
 
+    // 1. Calcula o estoque disponível para CADA LOTE (Produto)
     const produtosComEstoque = produtosSalvos.map(produto => {
       const totalVendido = saidasSalvas
         .filter(saida => saida.produtoId === produto.id)
@@ -76,10 +95,28 @@ export default function SaidaScreen() {
         estoqueDisponivel: estoqueDisponivel
       };
     })
-    .filter(produto => produto.estoqueDisponivel > 0);
+    .filter(produto => produto.estoqueDisponivel > 0); // Filtra lotes com estoque > 0
 
+    // Salva a lista de lotes brutos
     setProdutosDisponiveis(produtosComEstoque);
+
+    // 2. --- MUDANÇA: Agrupa os lotes por nome ---
+    const mapaProdutos = new Map<string, number>();
+    produtosComEstoque.forEach(p => {
+      // Soma o estoqueTotal para o 'nome'
+      mapaProdutos.set(p.nome, (mapaProdutos.get(p.nome) || 0) + p.estoqueDisponivel);
+    });
+
+    // Converte o Map para o array que o ScrollView usará
+    const agrupados = Array.from(mapaProdutos.entries()).map(([nome, estoqueTotal]) => ({
+      nome,
+      estoqueTotal
+    }));
     
+    setProdutosAgrupados(agrupados);
+    // --- Fim da Mudança ---
+    
+    // Limpa seleção se o lote selecionado não estiver mais disponível
     if (produtoSelecionado) {
         const produtoAindaDisponivel = produtosComEstoque.find(p => p.id === produtoSelecionado.id);
         if (!produtoAindaDisponivel) {
@@ -87,11 +124,33 @@ export default function SaidaScreen() {
         }
     }
   };
+  
+  // --- MUDANÇA: Novas funções do Modal ---
+  const handleAbrirModal = (nomeProduto: string) => {
+    // Filtra os lotes disponíveis (brutos) que correspondem ao nome clicado
+    const lotes = produtosDisponiveis.filter(p => p.nome === nomeProduto);
+    setLotesParaSelecionar(lotes);
+    setNomeModal(nomeProduto); // Salva o nome para o título do modal
+    setModalVisible(true);
+  };
+
+  const handleSelecionarLote = (lote: ProdutoComEstoque) => {
+    setProdutoSelecionado(lote); // Define o lote específico
+    setModalVisible(false); // Fecha o modal
+    setLotesParaSelecionar([]);
+    setNomeModal('');
+  };
+
+  const handleLimparSelecao = () => {
+    setProdutoSelecionado(null);
+  };
+  // --- Fim da Mudança ---
+
 
   const handleRegistrarSaida = async () => {
-    // (Validação sem mudanças)
+    // (Lógica idêntica, mas agora 'produtoSelecionado' é um lote)
     if (!produtoSelecionado || !quantidadeSaida.trim() || !precoVenda.trim()) {
-      Alert.alert('Erro', 'Selecione um produto e preencha todos os campos.');
+      Alert.alert('Erro', 'Selecione um produto/lote e preencha todos os campos.');
       return;
     }
     const qtdNum = parseInt(quantidadeSaida, 10);
@@ -103,22 +162,19 @@ export default function SaidaScreen() {
     if (qtdNum > produtoSelecionado.estoqueDisponivel) {
       Alert.alert(
         'Erro de Estoque',
-        `Quantidade insuficiente. Disponível: ${produtoSelecionado.estoqueDisponivel}`
+        `Quantidade insuficiente. Disponível neste lote: ${produtoSelecionado.estoqueDisponivel}`
       );
       return;
     }
     
-    // --- MUDANÇA (Gráfico) ---
-    // Adicionamos o campo 'data' para o gráfico funcionar
     const novaSaida: Saida = {
       id: String(new Date().getTime()),
-      produtoId: produtoSelecionado.id,
+      produtoId: produtoSelecionado.id, // Salva o ID do LOTE
       nomeProduto: produtoSelecionado.nome,
       quantidade: qtdNum,
       precoVenda: precoVendaNum,
-      data: new Date().toISOString(), // <-- LINHA ADICIONADA
+      data: new Date().toISOString(),
     };
-    // --- Fim da Mudança (Gráfico) ---
 
     const novaListaSaidas = [novaSaida, ...saidas];
     setSaidas(novaListaSaidas);
@@ -128,16 +184,14 @@ export default function SaidaScreen() {
     setQuantidadeSaida('');
     setPrecoVenda('');
     Keyboard.dismiss();
-    await carregarDados();
+    await carregarDados(); // Recarrega para atualizar o estoque dos grupos/lotes
   };
 
-  // --- MUDANÇA 4: handleEditarSaida agora navega para a nova tela ---
+  // Funções de Editar/Excluir Saída (sem mudanças)
   const handleEditarSaida = (id: string) => {
     navigation.navigate('EditarSaida', { saidaId: id });
   };
-
   const handleExcluirSaida = (id: string) => {
-    // (Lógica sem mudanças)
     Alert.alert(
       'Confirmar Exclusão',
       'Tem certeza que deseja excluir este registro de saída? Esta ação irá devolver o item ao estoque.',
@@ -156,8 +210,6 @@ export default function SaidaScreen() {
       ]
     );
   };
-
-  // renderItemSaida (Com uma pequena melhoria: mostrar a data)
   const renderItemSaida = ({ item }: { item: Saida }) => (
     <View style={styles.itemContainer}>
       <View style={styles.itemInfo}>
@@ -165,14 +217,12 @@ export default function SaidaScreen() {
         <Text style={styles.itemDetalhes}>
           Qtd: {item.quantidade} | Preço Venda: R$ {item.precoVenda.toFixed(2)}
         </Text>
-        {/* É bom exibir a data que foi registrada */}
         {item.data && (
             <Text style={styles.itemData}>
                 Registrado em: {new Date(item.data).toLocaleDateString('pt-BR')} às {new Date(item.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
             </Text>
         )}
       </View>
-      
       <View style={styles.itemAcoes}>
         <TouchableOpacity onPress={() => handleEditarSaida(item.id)} style={styles.acaoButton}>
           <Pencil size={22} color={cores.verdeMedio} />
@@ -184,37 +234,67 @@ export default function SaidaScreen() {
     </View>
   );
 
+  
+  // --- MUDANÇA: Componente para renderizar a seleção de produto ---
+  const renderSelecaoProduto = () => {
+    // CASO 1: Um lote JÁ FOI selecionado
+    if (produtoSelecionado) {
+      return (
+        <View style={styles.selecaoContainer}>
+          <View style={[styles.chipProduto, styles.chipProdutoSelecionado, {flex: 1}]}>
+             <View>
+                <Text style={[styles.chipProdutoTexto, styles.chipProdutoTextoSelecionado]}>
+                  {produtoSelecionado.nome} (Compra: R$ {produtoSelecionado.precoCompra.toFixed(2)})
+                </Text>
+                <Text style={[styles.chipProdutoTexto, styles.chipProdutoTextoSelecionado, {fontSize: 12}]}>
+                  (Est. Lote: {produtoSelecionado.estoqueDisponivel}) (Entrada: {new Date(produtoSelecionado.dataEntrada).toLocaleDateString('pt-BR')})
+                </Text>
+             </View>
+          </View>
+          <TouchableOpacity onPress={handleLimparSelecao} style={styles.limparSelecaoButton}>
+            <XCircle size={24} color={cores.danger} weight="fill" />
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    // CASO 2: NENHUM lote selecionado (mostra os grupos)
+    return (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.seletorScroll}>
+        <View style={styles.seletorProdutoContainer}>
+          {produtosAgrupados.length > 0 ? (
+            produtosAgrupados.map(grupo => (
+              <TouchableOpacity
+                key={grupo.nome}
+                style={styles.chipProduto}
+                onPress={() => handleAbrirModal(grupo.nome)} // Abre o modal
+              >
+                <Text style={styles.chipProdutoTexto}>
+                  {grupo.nome} (Est. Total: {grupo.estoqueTotal})
+                </Text>
+              </TouchableOpacity>
+            ))
+          ) : (
+            <Text style={styles.semEstoqueAviso}>Nenhum produto com estoque disponível.</Text>
+          )}
+        </View>
+      </ScrollView>
+    );
+  };
+  // --- Fim da Mudança ---
+
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* Formulário de Saída (Sem mudanças) */}
+      {/* Formulário de Saída */}
       <View style={styles.formContainer}>
         <Text style={styles.label}>Selecione o Produto (Estoque &gt; 0):</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.seletorScroll}>
-          <View style={styles.seletorProdutoContainer}>
-            {produtosDisponiveis.length > 0 ? (
-              produtosDisponiveis.map(produto => (
-                <TouchableOpacity
-                  key={produto.id}
-                  style={[
-                    styles.chipProduto,
-                    produtoSelecionado?.id === produto.id && styles.chipProdutoSelecionado
-                  ]}
-                  onPress={() => setProdutoSelecionado(produto)}
-                >
-                  <Text style={[
-                    styles.chipProdutoTexto,
-                    produtoSelecionado?.id === produto.id && styles.chipProdutoTextoSelecionado
-                  ]}>
-                    {produto.nome} (Est: {produto.estoqueDisponivel})
-                  </Text>
-                </TouchableOpacity>
-              ))
-            ) : (
-              <Text style={styles.semEstoqueAviso}>Nenhum produto com estoque disponível.</Text>
-            )}
-          </View>
-        </ScrollView>
+        
+        {/* --- MUDANÇA: Chama o novo renderizador --- */}
+        {renderSelecaoProduto()}
+        {/* --- Fim da Mudança --- */}
 
+        {/* Inputs (sem mudanças) */}
         <View style={styles.row}>
           <TextInput
             style={[styles.input, styles.inputMetade]}
@@ -223,7 +303,7 @@ export default function SaidaScreen() {
             onChangeText={setQuantidadeSaida}
             keyboardType="number-pad"
             placeholderTextColor={cores.placeholder}
-            editable={!!produtoSelecionado} 
+            editable={!!produtoSelecionado} // Só edita se um LOTE foi selecionado
           />
           <TextInput
             style={[styles.input, styles.inputMetade]}
@@ -236,6 +316,7 @@ export default function SaidaScreen() {
           />
         </View>
 
+        {/* Botão Salvar (sem mudanças) */}
         <TouchableOpacity
           onPress={handleRegistrarSaida}
           style={[
@@ -248,7 +329,7 @@ export default function SaidaScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Lista de Saídas */}
+      {/* Lista de Saídas (sem mudanças) */}
       <FlatList
         data={saidas}
         renderItem={renderItemSaida}
@@ -256,11 +337,50 @@ export default function SaidaScreen() {
         style={styles.lista}
         ListHeaderComponent={<Text style={styles.listaTitulo}>Saídas Registradas</Text>}
       />
+
+      {/* --- MUDANÇA: Modal de Seleção de Lote --- */}
+      <Modal
+        transparent={true}
+        visible={isModalVisible}
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setModalVisible(false)}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>Selecionar Lote de "{nomeModal}"</Text>
+                
+                <FlatList
+                  data={lotesParaSelecionar}
+                  keyExtractor={item => item.id}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity 
+                      style={styles.modalItem}
+                      onPress={() => handleSelecionarLote(item)}
+                    >
+                      <Text style={styles.modalItemTexto}>
+                        Compra: R$ {item.precoCompra.toFixed(2)}
+                      </Text>
+                      <Text style={styles.modalItemDetalhe}>
+                        Estoque: {item.estoqueDisponivel} | Entrada: {new Date(item.dataEntrada).toLocaleDateString('pt-BR')}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                />
+
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+      {/* --- Fim da Mudança --- */}
+
     </SafeAreaView>
   );
 }
 
-// Estilos (Adicionado 'itemData')
+// Estilos (Adicionado estilos do Modal e da Seleção)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -277,27 +397,40 @@ const styles = StyleSheet.create({
     color: cores.texto,
     marginBottom: 8,
   },
+  // --- MUDANÇA: Container da seleção ---
+  selecaoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  limparSelecaoButton: {
+    padding: 8,
+    marginLeft: 8,
+  },
+  // --- Fim da Mudança ---
   seletorScroll: {
-      maxHeight: 50, 
+      minHeight: 50, // Mínimo para não pular
       marginBottom: 12,
   },
   seletorProdutoContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingVertical: 8, // Espaço para os chips
   },
   chipProduto: {
     backgroundColor: cores.branco,
-    paddingVertical: 6,
+    paddingVertical: 10, // Aumentado
     paddingHorizontal: 12,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: cores.verdeMedio,
     marginRight: 8,
-    height: 34, 
+    justifyContent: 'center',
   },
   chipProdutoSelecionado: {
     backgroundColor: cores.verdeMedio,
     borderColor: cores.verdeEscuro,
+    paddingVertical: 6, // Reduzido
   },
   chipProdutoTexto: {
     color: cores.verdeMedio,
@@ -367,14 +500,12 @@ const styles = StyleSheet.create({
     color: cores.verdeMedio,
     marginTop: 2,
   },
-  // --- MUDANÇA: Estilo para a data ---
   itemData: {
     fontSize: 12,
     color: cores.placeholder,
     marginTop: 4,
     fontStyle: 'italic',
   },
-  // --- Fim da Mudança ---
   itemAcoes: {
     flexDirection: 'row',
   },
@@ -398,5 +529,48 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     textTransform: 'uppercase',
+  },
+
+  // --- MUDANÇA: Estilos do Modal de Lote ---
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: cores.branco,
+    borderRadius: 12,
+    padding: 20,
+    width: '100%',
+    maxHeight: '60%',
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: cores.texto,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalItem: {
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: cores.begeFundo,
+    backgroundColor: cores.branco,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  modalItemTexto: {
+    color: cores.texto,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  modalItemDetalhe: {
+    color: cores.verdeMedio,
+    fontSize: 14,
+    marginTop: 2,
   },
 });
