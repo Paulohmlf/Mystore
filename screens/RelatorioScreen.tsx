@@ -6,8 +6,9 @@ import {
   Database,
   DownloadSimple,
   Funnel,
+  MagnifyingGlass, // --- MUDANÇA ---
 } from 'phosphor-react-native';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react'; // React.useMemo será usado
 import {
   ActivityIndicator,
   Alert,
@@ -17,7 +18,8 @@ import {
   SafeAreaView,
   StyleSheet,
   Text,
-  TouchableOpacity, // --- MUDANÇA ---
+  TextInput, // --- MUDANÇA ---
+  TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from 'react-native';
@@ -27,8 +29,6 @@ import * as Sharing from 'expo-sharing';
 
 import { LineChart } from 'react-native-chart-kit';
 import { Produto, Saida, getProdutos, getSaidas } from '../services/storage';
-
-// --- MUDANÇA: REMOVIDO o import do @react-native-picker/picker ---
 
 // Paleta de cores (sem mudanças)
 const cores = {
@@ -41,14 +41,12 @@ const cores = {
   placeholder: '#A3BFAA',
 };
 
-// Constantes de filtro (sem mudanças)
+// Constantes e Interfaces (sem mudanças)
 const meses = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 ];
 const TODOS_OS_MESES = -1; 
-
-// Interfaces (sem mudanças)
 interface ItemRelatorio {
   id: string; nome: string; precoCompra: number; totalEntrada: number;
   totalVendido: number; estoqueDisponivel: number; lucroTotal: number;
@@ -59,7 +57,6 @@ interface ChartData {
              { data: number[]; color: (opacity?: number) => string; strokeWidth: number; }];
   legend: string[];
 }
-// --- MUDANÇA: Tipo para os dados do Modal ---
 interface ModalItem {
   label: string;
   value: any;
@@ -121,6 +118,7 @@ const prepararDadosGrafico = (saidas: Saida[], produtos: Produto[]): ChartData |
   };
 };
 const gerarHTMLRelatorio = (dados: ItemRelatorio[], lucroPeriodo: number, filtroDesc: string): string => {
+  // (Copiado, sem mudanças)
   const linhasTabela = dados.map(item => `
     <tr>
       <td>${item.nome}</td>
@@ -193,16 +191,19 @@ export default function RelatorioScreen() {
   const [filtroAno, setFiltroAno] = useState<string | null>(null);
   const [filtroMes, setFiltroMes] = useState<number>(TODOS_OS_MESES);
   
-  // --- MUDANÇA: Estados para o Modal ---
+  // Estados do Modal (sem mudanças)
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [pickerMode, setPickerMode] = useState<'ano' | 'mes' | null>(null);
   const [modalData, setModalData] = useState<ModalItem[]>([]);
+
+  // --- MUDANÇA: Estado para a Busca ---
+  const [searchTerm, setSearchTerm] = useState('');
   // --- Fim da Mudança ---
   
   const isFocused = useIsFocused();
   const screenWidth = Dimensions.get('window').width;
 
-  // Efeitos (carregarDadosBrutos, processarRelatorio) e getDescricaoFiltro
+  // Efeitos e Funções (carregarDadosBrutos, processarRelatorio, getDescricaoFiltro, handleExportarPDF, openPicker, onSelectItem)
   // (Exatamente como no código anterior, sem mudanças)
   useEffect(() => {
     if (isFocused) {
@@ -262,7 +263,6 @@ export default function RelatorioScreen() {
     return `Ano: ${ano} | Mês: ${mes}`;
   };
 
-  // handleExportarPDF (Sem mudanças)
   const handleExportarPDF = async () => {
     if (isExportando) return; 
     setIsExportando(true);
@@ -285,7 +285,6 @@ export default function RelatorioScreen() {
     }
   };
 
-  // --- MUDANÇA: Funções para controlar o Modal ---
   const openPicker = (mode: 'ano' | 'mes') => {
     setPickerMode(mode);
     if (mode === 'ano') {
@@ -301,7 +300,6 @@ export default function RelatorioScreen() {
   const onSelectItem = (item: ModalItem) => {
     if (pickerMode === 'ano') {
       setFiltroAno(item.value);
-      // Se selecionou "Todos os Anos", reseta o mês também
       if (item.value === null) {
           setFiltroMes(TODOS_OS_MESES);
       }
@@ -311,7 +309,6 @@ export default function RelatorioScreen() {
     setIsModalVisible(false);
     setPickerMode(null);
   };
-  // --- Fim da Mudança ---
 
   // renderItem (Sem mudanças)
   const renderItem = ({ item }: { item: ItemRelatorio }) => (
@@ -365,6 +362,18 @@ export default function RelatorioScreen() {
     );
   };
 
+  // --- MUDANÇA: Lógica de filtragem da lista ---
+  const filteredDadosRelatorio = React.useMemo(() => {
+    if (!searchTerm.trim()) {
+      return dadosRelatorio; // Retorna todos se a busca estiver vazia
+    }
+    // Retorna apenas os itens cujo nome inclui o termo de busca (sem case sensitive)
+    return dadosRelatorio.filter(item =>
+      item.nome.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [dadosRelatorio, searchTerm]); // Recalcula se 'dadosRelatorio' ou 'searchTerm' mudar
+  // --- Fim da Mudança ---
+
 
   return (
     <SafeAreaView style={styles.container}>
@@ -372,21 +381,21 @@ export default function RelatorioScreen() {
         <ActivityIndicator size="large" color={cores.verdeEscuro} style={{ marginTop: 50 }} />
       ) : (
         <FlatList
-          data={dadosRelatorio}
+          // --- MUDANÇA: Usa os dados filtrados ---
+          data={filteredDadosRelatorio}
+          // --- Fim da Mudança ---
           renderItem={renderItem}
           keyExtractor={item => item.id}
           style={styles.lista}
           ListHeaderComponent={
             <>
-              {/* --- MUDANÇA: Área de Filtros refatorada --- */}
+              {/* Filtro de Data (sem mudanças) */}
               <View style={styles.filtroContainer}>
                 <View style={styles.filtroHeader}>
                   <Funnel size={18} color={cores.verdeEscuro} weight="bold" />
                   <Text style={styles.filtroTitulo}>Filtrar Relatório</Text>
                 </View>
-
                 <View style={styles.pickersContainer}>
-                  {/* Botão Falso de Picker (Ano) */}
                   <TouchableOpacity 
                     style={styles.pickerButton} 
                     onPress={() => openPicker('ano')}
@@ -394,8 +403,6 @@ export default function RelatorioScreen() {
                     <Text style={styles.pickerButtonText}>{filtroAno || 'Todos os Anos'}</Text>
                     <CaretDown size={16} color={cores.texto} />
                   </TouchableOpacity>
-
-                  {/* Botão Falso de Picker (Mês) */}
                   <TouchableOpacity
                     style={[styles.pickerButton, !filtroAno && styles.pickerDesabilitado]}
                     onPress={() => openPicker('mes')}
@@ -408,7 +415,6 @@ export default function RelatorioScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
-              {/* --- Fim da Mudança --- */}
 
               {/* Card de Resumo (sem mudanças) */}
               <View style={styles.resumoGeralCard}>
@@ -439,18 +445,37 @@ export default function RelatorioScreen() {
               <Text style={styles.listaSubtitulo}>
                 Esta lista mostra o status TOTAL do estoque (sempre atual) e não é afetada pelos filtros de data.
               </Text>
+
+              {/* --- MUDANÇA: Barra de Busca --- */}
+              <View style={styles.searchContainer}>
+                <MagnifyingGlass size={20} color={cores.placeholder} style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchBar}
+                  placeholder="Buscar produto na lista..."
+                  placeholderTextColor={cores.placeholder}
+                  value={searchTerm}
+                  onChangeText={setSearchTerm}
+                />
+              </View>
+              {/* --- Fim da Mudança --- */}
             </>
           }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
                 <Database size={32} color={cores.verdeClaro} />
-                <Text style={styles.emptyText}>Nenhum produto cadastrado.</Text>
+                {/* --- MUDANÇA: Mensagem de "lista vazia" dinâmica --- */}
+                <Text style={styles.emptyText}>
+                  {searchTerm 
+                    ? 'Nenhum produto encontrado.' 
+                    : 'Nenhum produto cadastrado.'}
+                </Text>
+                {/* --- Fim da Mudança --- */}
             </View>
           }
         />
       )}
 
-      {/* --- MUDANÇA: Modal do Picker --- */}
+      {/* Modal do Picker (sem mudanças) */}
       <Modal
         transparent={true}
         visible={isModalVisible}
@@ -479,7 +504,6 @@ export default function RelatorioScreen() {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-      {/* --- Fim da Mudança --- */}
 
     </SafeAreaView>
   );
@@ -498,7 +522,7 @@ const chartConfig = {
 };
 
 
-// Estilos (MUDANÇAS nos filtros e ADIÇÃO do modal)
+// Estilos (ADIÇÃO da Barra de Busca)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -533,9 +557,8 @@ const styles = StyleSheet.create({
   pickersContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: 8, // Adicionado
+    marginTop: 8,
   },
-  // --- MUDANÇA: Estilos do Botão Falso ---
   pickerButton: {
     flex: 1,
     flexDirection: 'row',
@@ -551,15 +574,12 @@ const styles = StyleSheet.create({
   },
   pickerButtonText: {
     color: cores.texto,
-    fontSize: 14, // Ajustado
+    fontSize: 14,
   },
   pickerDesabilitado: {
       backgroundColor: '#ECEAE1',
       opacity: 0.7,
   },
-  // --- FIM DA MUDANÇA (Estilos 'pickerWrapper' e 'picker' removidos) ---
-
-  // --- MUDANÇA: Estilos do Modal ---
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -572,7 +592,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     width: '100%',
-    maxHeight: '60%', // Limita a altura do modal
+    maxHeight: '60%',
     elevation: 10,
   },
   modalTitle: {
@@ -586,7 +606,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   modalList: {
-      // Se necessário, pode limitar a altura
+      // (vazio)
   },
   modalItem: {
     paddingVertical: 14,
@@ -598,9 +618,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
   },
-  // --- FIM DA MUDANÇA ---
-
-  // (O resto dos estilos abaixo não foi alterado)
   resumoGeralCard: {
     backgroundColor: cores.verdeMedio, 
     marginHorizontal: 16,
@@ -666,6 +683,30 @@ const styles = StyleSheet.create({
       marginBottom: 10,
       marginTop: -4,
   },
+  // --- MUDANÇA: Estilos da Barra de Busca ---
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: cores.branco,
+    marginHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: cores.verdeClaro,
+    paddingHorizontal: 10,
+    marginTop: 10,
+    marginBottom: 10, // Adiciona espaço antes da lista
+    elevation: 1,
+  },
+  searchIcon: {
+      marginRight: 8,
+  },
+  searchBar: {
+      flex: 1,
+      height: 44,
+      fontSize: 16,
+      color: cores.texto,
+  },
+  // --- FIM DA MUDANÇA ---
   lista: {
     flex: 1,
   },
