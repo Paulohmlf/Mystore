@@ -21,9 +21,16 @@ export interface Saida {
   nomeProduto: string;
   quantidade: number;
   precoVenda: number;
+  // --- MUDANÇA ADICIONADA ---
+  /**
+   * Data em que a venda foi realizada.
+   * Salvar como string ISO: new Date().toISOString()
+   */
+  data: string;
 }
 
 // --- Funções para PRODUTOS (Tela de Entrada) ---
+// (Sem mudanças)
 
 /**
  * Salva a lista completa de produtos no AsyncStorage.
@@ -52,6 +59,7 @@ export const getProdutos = async (): Promise<Produto[]> => {
 };
 
 // --- Funções para SAÍDAS (Tela de Saída) ---
+// (Sem mudanças na lógica das funções)
 
 /**
  * Salva a lista completa de saídas no AsyncStorage.

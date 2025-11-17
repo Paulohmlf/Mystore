@@ -1,3 +1,4 @@
+// Arquivo: SaidaScreen.tsx
 import { useIsFocused } from '@react-navigation/native';
 import { Pencil, Trash } from 'phosphor-react-native';
 import React, { useEffect, useState } from 'react';
@@ -19,6 +20,7 @@ import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../App'; // Importa os tipos do App.tsx
 
+// Importar 'Produto' e 'Saida' com o campo 'data'
 import { Produto, Saida, getProdutos, getSaidas, salvarSaidas } from '../services/storage';
 
 const cores = {
@@ -87,7 +89,7 @@ export default function SaidaScreen() {
   };
 
   const handleRegistrarSaida = async () => {
-    // (Lógica sem mudanças)
+    // (Validação sem mudanças)
     if (!produtoSelecionado || !quantidadeSaida.trim() || !precoVenda.trim()) {
       Alert.alert('Erro', 'Selecione um produto e preencha todos os campos.');
       return;
@@ -105,13 +107,19 @@ export default function SaidaScreen() {
       );
       return;
     }
+    
+    // --- MUDANÇA (Gráfico) ---
+    // Adicionamos o campo 'data' para o gráfico funcionar
     const novaSaida: Saida = {
       id: String(new Date().getTime()),
       produtoId: produtoSelecionado.id,
       nomeProduto: produtoSelecionado.nome,
       quantidade: qtdNum,
       precoVenda: precoVendaNum,
+      data: new Date().toISOString(), // <-- LINHA ADICIONADA
     };
+    // --- Fim da Mudança (Gráfico) ---
+
     const novaListaSaidas = [novaSaida, ...saidas];
     setSaidas(novaListaSaidas);
     await salvarSaidas(novaListaSaidas);
@@ -125,8 +133,6 @@ export default function SaidaScreen() {
 
   // --- MUDANÇA 4: handleEditarSaida agora navega para a nova tela ---
   const handleEditarSaida = (id: string) => {
-    // Linha antiga (com o alerta) foi removida
-    // Nova linha:
     navigation.navigate('EditarSaida', { saidaId: id });
   };
 
@@ -151,7 +157,7 @@ export default function SaidaScreen() {
     );
   };
 
-  // renderItemSaida (Sem mudanças)
+  // renderItemSaida (Com uma pequena melhoria: mostrar a data)
   const renderItemSaida = ({ item }: { item: Saida }) => (
     <View style={styles.itemContainer}>
       <View style={styles.itemInfo}>
@@ -159,6 +165,12 @@ export default function SaidaScreen() {
         <Text style={styles.itemDetalhes}>
           Qtd: {item.quantidade} | Preço Venda: R$ {item.precoVenda.toFixed(2)}
         </Text>
+        {/* É bom exibir a data que foi registrada */}
+        {item.data && (
+            <Text style={styles.itemData}>
+                Registrado em: {new Date(item.data).toLocaleDateString('pt-BR')} às {new Date(item.data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+            </Text>
+        )}
       </View>
       
       <View style={styles.itemAcoes}>
@@ -174,7 +186,7 @@ export default function SaidaScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Formulário de Saída */}
+      {/* Formulário de Saída (Sem mudanças) */}
       <View style={styles.formContainer}>
         <Text style={styles.label}>Selecione o Produto (Estoque &gt; 0):</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.seletorScroll}>
@@ -248,7 +260,7 @@ export default function SaidaScreen() {
   );
 }
 
-// Estilos (Sem mudanças)
+// Estilos (Adicionado 'itemData')
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -353,7 +365,16 @@ const styles = StyleSheet.create({
   itemDetalhes: {
     fontSize: 14,
     color: cores.verdeMedio,
+    marginTop: 2,
   },
+  // --- MUDANÇA: Estilo para a data ---
+  itemData: {
+    fontSize: 12,
+    color: cores.placeholder,
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  // --- Fim da Mudança ---
   itemAcoes: {
     flexDirection: 'row',
   },

@@ -1,26 +1,29 @@
+// Arquivo: RelatorioScreen.tsx
 import { useIsFocused } from '@react-navigation/native';
-// --- MUDANÇA 1: Importar ícones e bibliotecas novas ---
 import { ChartLineUp, Database, DownloadSimple } from 'phosphor-react-native';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator, // Importar TouchableOpacity
+  ActivityIndicator,
   Alert,
+  Dimensions, // --- MUDANÇA: Importar Dimensions ---
   FlatList,
   SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
 
-// Importar as bibliotecas que instalamos
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
-import { getProdutos, getSaidas } from '../services/storage';
-// --- Fim da Mudança 1 ---
+// --- MUDANÇA: Importar LineChart ---
+import { LineChart } from 'react-native-chart-kit';
+// --- Fim da Mudança ---
 
-// Sua paleta de cores
+import { Produto, Saida, getProdutos, getSaidas } from '../services/storage'; // --- MUDANÇA: Importar tipos ---
+
+// Paleta de cores (sem mudanças)
 const cores = {
   verdeEscuro: '#325E54',
   verdeMedio: '#4A7969',
@@ -41,10 +44,28 @@ interface ItemRelatorio {
   lucroTotal: number;
 }
 
-// --- MUDANÇA 2: Função para gerar o HTML do PDF ---
-// Esta função cria a string de HTML que será convertida em PDF
+// --- MUDANÇA: Tipo para os dados do gráfico ---
+interface ChartData {
+  labels: string[];
+  datasets: [
+    {
+      data: number[];
+      color: (opacity?: number) => string; // Cor "Gasto"
+      strokeWidth: number;
+    },
+    {
+      data: number[];
+      color: (opacity?: number) => string; // Cor "Recebido"
+      strokeWidth: number;
+    }
+  ];
+  legend: string[]; // "Gasto" e "Recebido"
+}
+// --- Fim da Mudança ---
+
+// Função gerarHTMLRelatorio (sem mudanças)
 const gerarHTMLRelatorio = (dados: ItemRelatorio[], lucroGeral: number): string => {
-  // Mapeia os dados do relatório para linhas de tabela (<tr>)
+  // ... (código igual ao que você enviou)
   const linhasTabela = dados.map(item => `
     <tr>
       <td>${item.nome}</td>
@@ -53,74 +74,31 @@ const gerarHTMLRelatorio = (dados: ItemRelatorio[], lucroGeral: number): string 
       <td>${item.estoqueDisponivel} un.</td>
       <td>R$ ${item.lucroTotal.toFixed(2)}</td>
     </tr>
-  `).join(''); // .join('') junta todas as linhas em uma string só
+  `).join(''); 
 
-  // Retorna o HTML completo com estilos (CSS)
   return `
     <html>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
         <style>
-          body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: ${cores.begeFundo};
-            color: ${cores.texto};
-          }
-          h1, h2 {
-            color: ${cores.verdeEscuro};
-            border-bottom: 2px solid ${cores.verdeClaro};
-            padding-bottom: 5px;
-          }
-          .summary-card {
-            background-color: ${cores.verdeMedio};
-            color: ${cores.branco};
-            padding: 20px;
-            border-radius: 12px;
-            text-align: center;
-            margin-bottom: 20px;
-          }
-          .summary-card h2 {
-            color: ${cores.branco};
-            margin: 0 0 10px 0;
-            border-bottom: none;
-          }
-          .summary-card p {
-            font-size: 28px;
-            font-weight: bold;
-            margin: 0;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-          }
-          th, td {
-            border: 1px solid ${cores.verdeClaro};
-            padding: 10px;
-            text-align: left;
-          }
-          th {
-            background-color: ${cores.verdeEscuro};
-            color: ${cores.branco};
-          }
-          tr:nth-child(even) {
-            background-color: ${cores.branco};
-          }
-          tr:nth-child(odd) {
-            background-color: #f7f5ef; /* Bege um pouco mais claro */
-          }
+          body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: ${cores.begeFundo}; color: ${cores.texto}; }
+          h1, h2 { color: ${cores.verdeEscuro}; border-bottom: 2px solid ${cores.verdeClaro}; padding-bottom: 5px; }
+          .summary-card { background-color: ${cores.verdeMedio}; color: ${cores.branco}; padding: 20px; border-radius: 12px; text-align: center; margin-bottom: 20px; }
+          .summary-card h2 { color: ${cores.branco}; margin: 0 0 10px 0; border-bottom: none; }
+          .summary-card p { font-size: 28px; font-weight: bold; margin: 0; }
+          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+          th, td { border: 1px solid ${cores.verdeClaro}; padding: 10px; text-align: left; }
+          th { background-color: ${cores.verdeEscuro}; color: ${cores.branco}; }
+          tr:nth-child(even) { background-color: ${cores.branco}; }
+          tr:nth-child(odd) { background-color: #f7f5ef; }
         </style>
       </head>
       <body>
         <h1>Relatório de Estoque e Lucro</h1>
-        
         <div class="summary-card">
           <h2>Lucro Total Acumulado</h2>
           <p>R$ ${lucroGeral.toFixed(2)}</p>
         </div>
-
         <h2>Relatório Detalhado por Produto</h2>
         <table>
           <thead>
@@ -140,18 +118,93 @@ const gerarHTMLRelatorio = (dados: ItemRelatorio[], lucroGeral: number): string 
     </html>
   `;
 };
-// --- Fim da Mudança 2 ---
+// --- Fim da Função ---
+
+
+// --- MUDANÇA: Função para preparar os dados do gráfico ---
+const prepararDadosGrafico = (saidas: Saida[], produtos: Produto[]): ChartData | null => {
+  if (!saidas || saidas.length === 0 || !produtos || produtos.length === 0) {
+    return null; // Sem dados para o gráfico
+  }
+
+  // 1. Criar um mapa de produtos para acesso rápido ao precoCompra
+  const mapaProdutos = new Map<string, Produto>();
+  produtos.forEach(p => mapaProdutos.set(p.id, p));
+
+  // 2. Ordenar saídas por data
+  //    (Filtra saídas que não tenham data ou produto correspondente)
+  const saidasValidas = saidas
+    .filter(s => s.data && mapaProdutos.has(s.produtoId))
+    .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
+
+  if (saidasValidas.length === 0) {
+    return null;
+  }
+
+  // 3. Processar saídas para acumular Gasto (Custo) e Recebido (Venda)
+  const labels: string[] = [];
+  const dadosGasto: number[] = [];
+  const dadosRecebido: number[] = [];
+
+  let gastoAcumulado = 0;
+  let recebidoAcumulado = 0;
+
+  saidasValidas.forEach(saida => {
+    const produto = mapaProdutos.get(saida.produtoId);
+    if (!produto) return; // Segurança
+
+    // Custo da mercadoria vendida
+    const gastoDaVenda = produto.precoCompra * saida.quantidade;
+    // Valor recebido pela venda
+    const recebidoDaVenda = saida.precoVenda * saida.quantidade;
+
+    gastoAcumulado += gastoDaVenda;
+    recebidoAcumulado += recebidoDaVenda;
+
+    // Adiciona dados ao gráfico
+    labels.push(new Date(saida.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }));
+    dadosGasto.push(gastoAcumulado);
+    dadosRecebido.push(recebidoAcumulado);
+  });
+  
+  // Se tivermos apenas 1 ponto, duplicamos para o gráfico poder desenhar uma linha
+  if (labels.length === 1) {
+    labels.push(' '); // Adiciona um label vazio
+    dadosGasto.push(gastoAcumulado);
+    dadosRecebido.push(recebidoAcumulado);
+  }
+
+  return {
+    labels: labels,
+    datasets: [
+      {
+        data: dadosGasto,
+        color: (opacity = 1) => `rgba(217, 83, 79, ${opacity})`, // Vermelho (Gasto)
+        strokeWidth: 2,
+      },
+      {
+        data: dadosRecebido,
+        color: (opacity = 1) => `rgba(92, 184, 92, ${opacity})`, // Verde (Recebido)
+        strokeWidth: 2,
+      },
+    ],
+    legend: ['Gasto (Acumulado)', 'Recebido (Acumulado)'],
+  };
+};
+// --- Fim da Função ---
 
 
 export default function RelatorioScreen() {
   const [dadosRelatorio, setDadosRelatorio] = useState<ItemRelatorio[]>([]);
   const [lucroGeral, setLucroGeral] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  
-  // --- MUDANÇA 3: Estado de carregamento para o PDF ---
   const [isExportando, setIsExportando] = useState(false);
   
+  // --- MUDANÇA: Estado para o gráfico ---
+  const [dadosGrafico, setDadosGrafico] = useState<ChartData | null>(null);
+
   const isFocused = useIsFocused();
+  const screenWidth = Dimensions.get('window').width; // Pega a largura da tela
 
   useEffect(() => {
     if (isFocused) {
@@ -160,11 +213,13 @@ export default function RelatorioScreen() {
   }, [isFocused]);
 
   const gerarRelatorio = async () => {
-    // (Lógica sem mudanças)
     setIsLoading(true);
+    setDadosGrafico(null); // Limpa o gráfico antigo
+
     const produtos = await getProdutos();
     const saidas = await getSaidas();
     let lucroAcumuladoGeral = 0;
+
     const relatorio = produtos.map(produto => {
       const saidasDoProduto = saidas.filter(s => s.produtoId === produto.id);
       const totalVendido = saidasDoProduto.reduce((soma, saida) => soma + saida.quantidade, 0);
@@ -184,24 +239,27 @@ export default function RelatorioScreen() {
         lucroTotal: lucroTotalProduto,
       };
     });
+
     setDadosRelatorio(relatorio);
     setLucroGeral(lucroAcumuladoGeral);
+
+    // --- MUDANÇA: Chamar a função para preparar o gráfico ---
+    const dadosParaGrafico = prepararDadosGrafico(saidas, produtos);
+    setDadosGrafico(dadosParaGrafico);
+    // --- Fim da Mudança ---
+
     setIsLoading(false);
   };
 
-  // --- MUDANÇA 4: Função para Exportar o PDF ---
+  // Função handleExportarPDF (sem mudanças)
   const handleExportarPDF = async () => {
-    if (isExportando) return; // Previne cliques duplos
+    if (isExportando) return; 
     setIsExportando(true);
 
     try {
-      // 1. Gera o HTML
       const htmlContent = gerarHTMLRelatorio(dadosRelatorio, lucroGeral);
-      
-      // 2. Cria o arquivo PDF
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
       
-      // 3. Compartilha o arquivo
       if (!(await Sharing.isAvailableAsync())) {
         Alert.alert('Erro', 'O compartilhamento não está disponível neste dispositivo.');
         return;
@@ -216,10 +274,10 @@ export default function RelatorioScreen() {
       console.error(error);
       Alert.alert('Erro', 'Ocorreu um erro ao exportar o PDF.');
     } finally {
-      setIsExportando(false); // Libera o botão
+      setIsExportando(false); 
     }
   };
-  // --- Fim da Mudança 4 ---
+  // --- Fim da Função ---
 
 
   // renderItem (Sem mudanças)
@@ -249,40 +307,88 @@ export default function RelatorioScreen() {
     </View>
   );
 
+  // --- MUDANÇA: Componente para renderizar o Gráfico ---
+  // --- MUDANÇA: Componente para renderizar o Gráfico ---
+  const renderChart = () => {
+    if (isLoading) {
+        return <ActivityIndicator size="large" color={cores.verdeEscuro} style={{ marginVertical: 40 }} />;
+    }
+    
+    if (!dadosGrafico) {
+        return (
+            <View style={styles.emptyContainer}>
+                <ChartLineUp size={32} color={cores.verdeClaro} />
+                <Text style={styles.emptyText}>Sem dados de vendas para exibir o gráfico.</Text>
+                <Text style={styles.emptyText}>Registre algumas saídas para começar.</Text>
+            </View>
+        );
+    }
+    
+    return (
+      <View style={styles.chartContainer}>
+        <Text style={styles.listaTitulo}>Evolução de Gasto vs. Recebido</Text>
+        <LineChart
+          data={dadosGrafico}
+          width={screenWidth - 32} // Largura da tela menos as margens
+          height={250}
+          yAxisLabel="R$ "
+          yAxisSuffix=""
+          chartConfig={chartConfig}
+          bezier // Deixa a linha curvada
+          style={{
+            borderRadius: 12,
+            paddingTop: 16,
+          }}
+          // A propriedade 'legend' foi removida daqui,
+          // pois ela já está incluída dentro do 'dadosGrafico'
+        />
+      </View>
+    );
+  };
+  // --- Fim da Mudança ---
+
+
+  // O return da tela principal agora usa FlatList
+  // para podermos rolar a tela e ver o gráfico e a lista
   return (
     <SafeAreaView style={styles.container}>
-      {/* Card de Resumo Geral */}
-      <View style={styles.resumoGeralCard}>
-          <View>
-            <Text style={styles.resumoGeralLabel}>Lucro Total Acumulado</Text>
-            <Text style={styles.resumoGeralValor}>R$ {lucroGeral.toFixed(2)}</Text>
-          </View>
-          <ChartLineUp size={40} color={cores.branco} weight="bold" />
-      </View>
-
-      {/* --- MUDANÇA 5: Adicionar o Botão de Exportar --- */}
-      <TouchableOpacity 
-        style={styles.botaoExportar}
-        onPress={handleExportarPDF}
-        disabled={isExportando || isLoading}
-      >
-        <DownloadSimple size={20} color={cores.verdeEscuro} weight="bold" />
-        <Text style={styles.botaoExportarTexto}>
-          {isExportando ? 'Exportando...' : 'Exportar Relatório (PDF)'}
-        </Text>
-      </TouchableOpacity>
-      {/* --- Fim da Mudança 5 --- */}
-
-      <Text style={styles.listaTitulo}>Relatório Detalhado por Produto</Text>
-
       {isLoading ? (
-        <ActivityIndicator size="large" color={cores.verdeEscuro} style={{ marginTop: 20 }} />
+        <ActivityIndicator size="large" color={cores.verdeEscuro} style={{ marginTop: 50 }} />
       ) : (
         <FlatList
           data={dadosRelatorio}
           renderItem={renderItem}
           keyExtractor={item => item.id}
           style={styles.lista}
+          ListHeaderComponent={
+            <>
+              {/* Card de Resumo Geral */}
+              <View style={styles.resumoGeralCard}>
+                <View>
+                  <Text style={styles.resumoGeralLabel}>Lucro Total Acumulado</Text>
+                  <Text style={styles.resumoGeralValor}>R$ {lucroGeral.toFixed(2)}</Text>
+                </View>
+                <ChartLineUp size={40} color={cores.branco} weight="bold" />
+              </View>
+
+              {/* Botão de Exportar */}
+              <TouchableOpacity 
+                style={styles.botaoExportar}
+                onPress={handleExportarPDF}
+                disabled={isExportando || isLoading}
+              >
+                <DownloadSimple size={20} color={cores.verdeEscuro} weight="bold" />
+                <Text style={styles.botaoExportarTexto}>
+                  {isExportando ? 'Exportando...' : 'Exportar Relatório (PDF)'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* --- MUDANÇA: Renderiza o gráfico aqui --- */}
+              {renderChart()}
+
+              <Text style={styles.listaTitulo}>Relatório Detalhado por Produto</Text>
+            </>
+          }
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
                 <Database size={32} color={cores.verdeClaro} />
@@ -295,7 +401,27 @@ export default function RelatorioScreen() {
   );
 }
 
-// Estilos
+// --- MUDANÇA: Configuração de cores do Gráfico ---
+const chartConfig = {
+  backgroundColor: cores.branco,
+  backgroundGradientFrom: cores.branco,
+  backgroundGradientTo: cores.branco,
+  decimalPlaces: 2,
+  color: (opacity = 1) => `rgba(50, 94, 84, ${opacity})`, // Cor principal (labels)
+  labelColor: (opacity = 1) => `rgba(50, 94, 84, ${opacity})`, // Cor dos labels
+  style: {
+    borderRadius: 16,
+  },
+  propsForDots: {
+    r: '4', // Tamanho dos pontos
+    strokeWidth: '2',
+    stroke: cores.verdeMedio, // Borda dos pontos
+  },
+};
+// --- Fim da Mudança ---
+
+
+// Estilos (Com adições)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -303,17 +429,14 @@ const styles = StyleSheet.create({
   },
   resumoGeralCard: {
     backgroundColor: cores.verdeMedio, 
-    margin: 16,
+    marginHorizontal: 16,
+    marginTop: 16,
     padding: 20,
     borderRadius: 12,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
   },
   resumoGeralLabel: {
     fontSize: 16,
@@ -325,24 +448,18 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: cores.branco,
   },
-
-  // --- MUDANÇA 6: Estilos para o botão de exportar ---
   botaoExportar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: cores.branco,
     marginHorizontal: 16,
-    marginBottom: 10,
+    marginTop: 16,
     paddingVertical: 12,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: cores.verdeClaro,
     elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
   },
   botaoExportarTexto: {
     fontSize: 16,
@@ -350,13 +467,25 @@ const styles = StyleSheet.create({
     color: cores.verdeEscuro,
     marginLeft: 10,
   },
-  // --- Fim da Mudança 6 ---
+
+  // --- MUDANÇA: Estilos do Gráfico ---
+  chartContainer: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    backgroundColor: cores.branco,
+    borderRadius: 12,
+    paddingBottom: 10,
+    elevation: 2,
+    alignItems: 'center', // Centraliza o gráfico
+  },
+  // --- Fim da Mudança ---
 
   listaTitulo: {
     fontSize: 18,
     fontWeight: 'bold',
     color: cores.texto,
     marginLeft: 16,
+    marginTop: 20, // Ajustado
     marginBottom: 10,
   },
   lista: {
@@ -369,10 +498,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 12,
     elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
   },
   itemNome: {
     fontSize: 18,
@@ -418,14 +543,19 @@ const styles = StyleSheet.create({
       color: cores.verdeEscuro, 
   },
   emptyContainer: {
-      flex: 1,
       justifyContent: 'center',
       alignItems: 'center',
-      marginTop: 50,
+      paddingVertical: 40, // Aumentado
+      paddingHorizontal: 16,
+      backgroundColor: cores.branco,
+      marginHorizontal: 16,
+      borderRadius: 12,
+      marginTop: 20,
   },
   emptyText: {
       fontSize: 16,
       color: cores.verdeMedio,
       marginTop: 8,
+      textAlign: 'center',
   }
 });
