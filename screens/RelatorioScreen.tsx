@@ -1,27 +1,34 @@
 // Arquivo: RelatorioScreen.tsx
 import { useIsFocused } from '@react-navigation/native';
-import { ChartLineUp, Database, DownloadSimple } from 'phosphor-react-native';
+import {
+  CaretDown,
+  ChartLineUp,
+  Database,
+  DownloadSimple,
+  Funnel,
+} from 'phosphor-react-native';
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Dimensions, // --- MUDANÇA: Importar Dimensions ---
+  Dimensions,
   FlatList,
+  Modal,
   SafeAreaView,
   StyleSheet,
   Text,
-  TouchableOpacity,
+  TouchableOpacity, // --- MUDANÇA ---
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
-// --- MUDANÇA: Importar LineChart ---
 import { LineChart } from 'react-native-chart-kit';
-// --- Fim da Mudança ---
+import { Produto, Saida, getProdutos, getSaidas } from '../services/storage';
 
-import { Produto, Saida, getProdutos, getSaidas } from '../services/storage'; // --- MUDANÇA: Importar tipos ---
+// --- MUDANÇA: REMOVIDO o import do @react-native-picker/picker ---
 
 // Paleta de cores (sem mudanças)
 const cores = {
@@ -31,41 +38,89 @@ const cores = {
   begeFundo: '#F5F1E6',
   branco: '#FFFFFF',
   texto: '#325E54',
+  placeholder: '#A3BFAA',
 };
 
-// Interface (sem mudanças)
-interface ItemRelatorio {
-  id: string;
-  nome: string;
-  precoCompra: number;
-  totalEntrada: number;
-  totalVendido: number;
-  estoqueDisponivel: number;
-  lucroTotal: number;
-}
+// Constantes de filtro (sem mudanças)
+const meses = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+];
+const TODOS_OS_MESES = -1; 
 
-// --- MUDANÇA: Tipo para os dados do gráfico ---
+// Interfaces (sem mudanças)
+interface ItemRelatorio {
+  id: string; nome: string; precoCompra: number; totalEntrada: number;
+  totalVendido: number; estoqueDisponivel: number; lucroTotal: number;
+}
 interface ChartData {
   labels: string[];
-  datasets: [
-    {
-      data: number[];
-      color: (opacity?: number) => string; // Cor "Gasto"
-      strokeWidth: number;
-    },
-    {
-      data: number[];
-      color: (opacity?: number) => string; // Cor "Recebido"
-      strokeWidth: number;
-    }
-  ];
-  legend: string[]; // "Gasto" e "Recebido"
+  datasets: [{ data: number[]; color: (opacity?: number) => string; strokeWidth: number; },
+             { data: number[]; color: (opacity?: number) => string; strokeWidth: number; }];
+  legend: string[];
 }
-// --- Fim da Mudança ---
+// --- MUDANÇA: Tipo para os dados do Modal ---
+interface ModalItem {
+  label: string;
+  value: any;
+}
 
-// Função gerarHTMLRelatorio (sem mudanças)
-const gerarHTMLRelatorio = (dados: ItemRelatorio[], lucroGeral: number): string => {
-  // ... (código igual ao que você enviou)
+// Funções de cálculo (calcularLucro, prepararDadosGrafico, gerarHTMLRelatorio)
+// (Exatamente como no código anterior, sem mudanças)
+const calcularLucro = (saidas: Saida[], produtos: Produto[]): number => {
+  const mapaProdutos = new Map(produtos.map(p => [p.id, p]));
+  let lucroTotal = 0;
+  for (const saida of saidas) {
+    const produto = mapaProdutos.get(saida.produtoId);
+    if (produto) {
+      lucroTotal += (saida.precoVenda - produto.precoCompra) * saida.quantidade;
+    }
+  }
+  return lucroTotal;
+};
+const prepararDadosGrafico = (saidas: Saida[], produtos: Produto[]): ChartData | null => {
+  if (!saidas || saidas.length === 0 || !produtos || produtos.length === 0) {
+    return null; 
+  }
+  const mapaProdutos = new Map<string, Produto>();
+  produtos.forEach(p => mapaProdutos.set(p.id, p));
+  const saidasValidas = saidas
+    .filter(s => s.data && mapaProdutos.has(s.produtoId))
+    .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
+  if (saidasValidas.length === 0) {
+    return null;
+  }
+  const labels: string[] = [];
+  const dadosGasto: number[] = [];
+  const dadosRecebido: number[] = [];
+  let gastoAcumulado = 0;
+  let recebidoAcumulado = 0;
+  saidasValidas.forEach(saida => {
+    const produto = mapaProdutos.get(saida.produtoId);
+    if (!produto) return; 
+    const gastoDaVenda = produto.precoCompra * saida.quantidade;
+    const recebidoDaVenda = saida.precoVenda * saida.quantidade;
+    gastoAcumulado += gastoDaVenda;
+    recebidoAcumulado += recebidoDaVenda;
+    labels.push(new Date(saida.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }));
+    dadosGasto.push(gastoAcumulado);
+    dadosRecebido.push(recebidoAcumulado);
+  });
+  if (labels.length === 1) {
+    labels.push(' ');
+    dadosGasto.push(gastoAcumulado);
+    dadosRecebido.push(recebidoAcumulado);
+  }
+  return {
+    labels: labels,
+    datasets: [
+      { data: dadosGasto, color: (opacity = 1) => `rgba(217, 83, 79, ${opacity})`, strokeWidth: 2, },
+      { data: dadosRecebido, color: (opacity = 1) => `rgba(92, 184, 92, ${opacity})`, strokeWidth: 2, },
+    ],
+    legend: ['Gasto (Acumulado)', 'Recebido (Acumulado)'],
+  };
+};
+const gerarHTMLRelatorio = (dados: ItemRelatorio[], lucroPeriodo: number, filtroDesc: string): string => {
   const linhasTabela = dados.map(item => `
     <tr>
       <td>${item.nome}</td>
@@ -75,14 +130,13 @@ const gerarHTMLRelatorio = (dados: ItemRelatorio[], lucroGeral: number): string 
       <td>R$ ${item.lucroTotal.toFixed(2)}</td>
     </tr>
   `).join(''); 
-
   return `
     <html>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
         <style>
           body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background-color: ${cores.begeFundo}; color: ${cores.texto}; }
           h1, h2 { color: ${cores.verdeEscuro}; border-bottom: 2px solid ${cores.verdeClaro}; padding-bottom: 5px; }
+          .filtro { color: ${cores.verdeMedio}; font-size: 16px; font-style: italic; margin-bottom: 15px; }
           .summary-card { background-color: ${cores.verdeMedio}; color: ${cores.branco}; padding: 20px; border-radius: 12px; text-align: center; margin-bottom: 20px; }
           .summary-card h2 { color: ${cores.branco}; margin: 0 0 10px 0; border-bottom: none; }
           .summary-card p { font-size: 28px; font-weight: bold; margin: 0; }
@@ -95,19 +149,20 @@ const gerarHTMLRelatorio = (dados: ItemRelatorio[], lucroGeral: number): string 
       </head>
       <body>
         <h1>Relatório de Estoque e Lucro</h1>
+        <p class="filtro">Filtro aplicado: ${filtroDesc}</p>
         <div class="summary-card">
-          <h2>Lucro Total Acumulado</h2>
-          <p>R$ ${lucroGeral.toFixed(2)}</p>
+          <h2>Lucro Total (Período)</h2>
+          <p>R$ ${lucroPeriodo.toFixed(2)}</p>
         </div>
-        <h2>Relatório Detalhado por Produto</h2>
+        <h2>Relatório Detalhado de Estoque (Visão Atual)</h2>
         <table>
           <thead>
             <tr>
               <th>Produto</th>
-              <th>Entrada</th>
-              <th>Saída</th>
-              <th>Estoque</th>
-              <th>Lucro</th>
+              <th>Entrada (Total)</th>
+              <th>Saída (Total)</th>
+              <th>Estoque (Atual)</th>
+              <th>Lucro (Total)</th>
             </tr>
           </thead>
           <tbody>
@@ -118,158 +173,110 @@ const gerarHTMLRelatorio = (dados: ItemRelatorio[], lucroGeral: number): string 
     </html>
   `;
 };
-// --- Fim da Função ---
-
-
-// --- MUDANÇA: Função para preparar os dados do gráfico ---
-const prepararDadosGrafico = (saidas: Saida[], produtos: Produto[]): ChartData | null => {
-  if (!saidas || saidas.length === 0 || !produtos || produtos.length === 0) {
-    return null; // Sem dados para o gráfico
-  }
-
-  // 1. Criar um mapa de produtos para acesso rápido ao precoCompra
-  const mapaProdutos = new Map<string, Produto>();
-  produtos.forEach(p => mapaProdutos.set(p.id, p));
-
-  // 2. Ordenar saídas por data
-  //    (Filtra saídas que não tenham data ou produto correspondente)
-  const saidasValidas = saidas
-    .filter(s => s.data && mapaProdutos.has(s.produtoId))
-    .sort((a, b) => new Date(a.data).getTime() - new Date(b.data).getTime());
-
-  if (saidasValidas.length === 0) {
-    return null;
-  }
-
-  // 3. Processar saídas para acumular Gasto (Custo) e Recebido (Venda)
-  const labels: string[] = [];
-  const dadosGasto: number[] = [];
-  const dadosRecebido: number[] = [];
-
-  let gastoAcumulado = 0;
-  let recebidoAcumulado = 0;
-
-  saidasValidas.forEach(saida => {
-    const produto = mapaProdutos.get(saida.produtoId);
-    if (!produto) return; // Segurança
-
-    // Custo da mercadoria vendida
-    const gastoDaVenda = produto.precoCompra * saida.quantidade;
-    // Valor recebido pela venda
-    const recebidoDaVenda = saida.precoVenda * saida.quantidade;
-
-    gastoAcumulado += gastoDaVenda;
-    recebidoAcumulado += recebidoDaVenda;
-
-    // Adiciona dados ao gráfico
-    labels.push(new Date(saida.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }));
-    dadosGasto.push(gastoAcumulado);
-    dadosRecebido.push(recebidoAcumulado);
-  });
-  
-  // Se tivermos apenas 1 ponto, duplicamos para o gráfico poder desenhar uma linha
-  if (labels.length === 1) {
-    labels.push(' '); // Adiciona um label vazio
-    dadosGasto.push(gastoAcumulado);
-    dadosRecebido.push(recebidoAcumulado);
-  }
-
-  return {
-    labels: labels,
-    datasets: [
-      {
-        data: dadosGasto,
-        color: (opacity = 1) => `rgba(217, 83, 79, ${opacity})`, // Vermelho (Gasto)
-        strokeWidth: 2,
-      },
-      {
-        data: dadosRecebido,
-        color: (opacity = 1) => `rgba(92, 184, 92, ${opacity})`, // Verde (Recebido)
-        strokeWidth: 2,
-      },
-    ],
-    legend: ['Gasto (Acumulado)', 'Recebido (Acumulado)'],
-  };
-};
-// --- Fim da Função ---
+// --- Fim das Funções de Cálculo ---
 
 
 export default function RelatorioScreen() {
+  // Dados brutos (sem mudanças)
+  const [allProdutos, setAllProdutos] = useState<Produto[]>([]);
+  const [allSaidas, setAllSaidas] = useState<Saida[]>([]);
+  
+  // Dados processados (sem mudanças)
   const [dadosRelatorio, setDadosRelatorio] = useState<ItemRelatorio[]>([]);
-  const [lucroGeral, setLucroGeral] = useState(0);
+  const [lucroPeriodo, setLucroPeriodo] = useState(0);
+  const [dadosGrafico, setDadosGrafico] = useState<ChartData | null>(null);
+  
+  // Estados de UI e Filtro (sem mudanças)
   const [isLoading, setIsLoading] = useState(true);
   const [isExportando, setIsExportando] = useState(false);
+  const [anosDisponiveis, setAnosDisponiveis] = useState<string[]>([]);
+  const [filtroAno, setFiltroAno] = useState<string | null>(null);
+  const [filtroMes, setFiltroMes] = useState<number>(TODOS_OS_MESES);
   
-  // --- MUDANÇA: Estado para o gráfico ---
-  const [dadosGrafico, setDadosGrafico] = useState<ChartData | null>(null);
-
+  // --- MUDANÇA: Estados para o Modal ---
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [pickerMode, setPickerMode] = useState<'ano' | 'mes' | null>(null);
+  const [modalData, setModalData] = useState<ModalItem[]>([]);
+  // --- Fim da Mudança ---
+  
   const isFocused = useIsFocused();
-  const screenWidth = Dimensions.get('window').width; // Pega a largura da tela
+  const screenWidth = Dimensions.get('window').width;
 
+  // Efeitos (carregarDadosBrutos, processarRelatorio) e getDescricaoFiltro
+  // (Exatamente como no código anterior, sem mudanças)
   useEffect(() => {
     if (isFocused) {
-      gerarRelatorio();
+      carregarDadosBrutos();
     }
   }, [isFocused]);
 
-  const gerarRelatorio = async () => {
-    setIsLoading(true);
-    setDadosGrafico(null); // Limpa o gráfico antigo
+  useEffect(() => {
+    if (!isLoading) {
+      processarRelatorio();
+    }
+  }, [allProdutos, allSaidas, filtroAno, filtroMes, isLoading]);
 
+  const carregarDadosBrutos = async () => {
+    setIsLoading(true);
     const produtos = await getProdutos();
     const saidas = await getSaidas();
-    let lucroAcumuladoGeral = 0;
-
-    const relatorio = produtos.map(produto => {
-      const saidasDoProduto = saidas.filter(s => s.produtoId === produto.id);
-      const totalVendido = saidasDoProduto.reduce((soma, saida) => soma + saida.quantidade, 0);
-      const lucroTotalProduto = saidasDoProduto.reduce((somaLucro, saida) => {
-        const lucroDaVenda = (saida.precoVenda - produto.precoCompra) * saida.quantidade;
-        return somaLucro + lucroDaVenda;
-      }, 0);
-      const estoqueDisponivel = produto.quantidade - totalVendido;
-      lucroAcumuladoGeral += lucroTotalProduto;
-      return {
-        id: produto.id,
-        nome: produto.nome,
-        precoCompra: produto.precoCompra,
-        totalEntrada: produto.quantidade,
-        totalVendido: totalVendido,
-        estoqueDisponivel: estoqueDisponivel,
-        lucroTotal: lucroTotalProduto,
-      };
-    });
-
-    setDadosRelatorio(relatorio);
-    setLucroGeral(lucroAcumuladoGeral);
-
-    // --- MUDANÇA: Chamar a função para preparar o gráfico ---
-    const dadosParaGrafico = prepararDadosGrafico(saidas, produtos);
-    setDadosGrafico(dadosParaGrafico);
-    // --- Fim da Mudança ---
-
-    setIsLoading(false);
+    setAllProdutos(produtos);
+    setAllSaidas(saidas);
+    const years = [...new Set(saidas.map(s => new Date(s.data).getFullYear().toString()))]
+                    .sort((a, b) => b.localeCompare(a));
+    setAnosDisponiveis(years);
+    setIsLoading(false); 
   };
 
-  // Função handleExportarPDF (sem mudanças)
+  const processarRelatorio = () => {
+    const saidasFiltradas = allSaidas.filter(s => {
+      const dataVenda = new Date(s.data);
+      const anoMatch = !filtroAno || dataVenda.getFullYear().toString() === filtroAno;
+      const mesMatch = (filtroMes === TODOS_OS_MESES) || dataVenda.getMonth() === filtroMes;
+      return anoMatch && mesMatch;
+    });
+
+    const lucroFiltrado = calcularLucro(saidasFiltradas, allProdutos);
+    setLucroPeriodo(lucroFiltrado);
+    
+    const dadosParaGrafico = prepararDadosGrafico(saidasFiltradas, allProdutos);
+    setDadosGrafico(dadosParaGrafico);
+
+    const relatorio = allProdutos.map(produto => {
+      const saidasDoProduto = allSaidas.filter(s => s.produtoId === produto.id);
+      const totalVendido = saidasDoProduto.reduce((soma, saida) => soma + saida.quantidade, 0);
+      const lucroTotalProduto = calcularLucro(saidasDoProduto, [produto]);
+      const estoqueDisponivel = produto.quantidade - totalVendido;
+      return {
+        id: produto.id, nome: produto.nome, precoCompra: produto.precoCompra,
+        totalEntrada: produto.quantidade, totalVendido: totalVendido,
+        estoqueDisponivel: estoqueDisponivel, lucroTotal: lucroTotalProduto,
+      };
+    });
+    setDadosRelatorio(relatorio);
+  };
+  
+  const getDescricaoFiltro = () => {
+    const ano = filtroAno || "Todos";
+    const mes = filtroMes === TODOS_OS_MESES ? "Todos" : meses[filtroMes];
+    return `Ano: ${ano} | Mês: ${mes}`;
+  };
+
+  // handleExportarPDF (Sem mudanças)
   const handleExportarPDF = async () => {
     if (isExportando) return; 
     setIsExportando(true);
-
     try {
-      const htmlContent = gerarHTMLRelatorio(dadosRelatorio, lucroGeral);
+      const htmlContent = gerarHTMLRelatorio(dadosRelatorio, lucroPeriodo, getDescricaoFiltro());
       const { uri } = await Print.printToFileAsync({ html: htmlContent });
-      
       if (!(await Sharing.isAvailableAsync())) {
         Alert.alert('Erro', 'O compartilhamento não está disponível neste dispositivo.');
         return;
       }
-      
       await Sharing.shareAsync(uri, {
         mimeType: 'application/pdf',
         dialogTitle: 'Exportar Relatório em PDF',
       });
-
     } catch (error) {
       console.error(error);
       Alert.alert('Erro', 'Ocorreu um erro ao exportar o PDF.');
@@ -277,79 +284,88 @@ export default function RelatorioScreen() {
       setIsExportando(false); 
     }
   };
-  // --- Fim da Função ---
 
+  // --- MUDANÇA: Funções para controlar o Modal ---
+  const openPicker = (mode: 'ano' | 'mes') => {
+    setPickerMode(mode);
+    if (mode === 'ano') {
+      const anosFormatados = anosDisponiveis.map(ano => ({ label: ano, value: ano }));
+      setModalData([{ label: "Todos os Anos", value: null }, ...anosFormatados]);
+    } else {
+      const mesesFormatados = meses.map((mes, index) => ({ label: mes, value: index }));
+      setModalData([{ label: "Todos os Meses", value: TODOS_OS_MESES }, ...mesesFormatados]);
+    }
+    setIsModalVisible(true);
+  };
+
+  const onSelectItem = (item: ModalItem) => {
+    if (pickerMode === 'ano') {
+      setFiltroAno(item.value);
+      // Se selecionou "Todos os Anos", reseta o mês também
+      if (item.value === null) {
+          setFiltroMes(TODOS_OS_MESES);
+      }
+    } else if (pickerMode === 'mes') {
+      setFiltroMes(item.value);
+    }
+    setIsModalVisible(false);
+    setPickerMode(null);
+  };
+  // --- Fim da Mudança ---
 
   // renderItem (Sem mudanças)
   const renderItem = ({ item }: { item: ItemRelatorio }) => (
     <View style={styles.itemContainer}>
       <Text style={styles.itemNome}>{item.nome}</Text>
-      
       <View style={styles.detalheRow}>
-        <Text style={styles.detalheLabel}>Entrada:</Text>
+        <Text style={styles.detalheLabel}>Entrada (Total):</Text>
         <Text style={styles.detalheValor}>{item.totalEntrada} un.</Text>
       </View>
       <View style={styles.detalheRow}>
-        <Text style={styles.detalheLabel}>Saída (Vendido):</Text>
+        <Text style={styles.detalheLabel}>Saída (Total):</Text>
         <Text style={styles.detalheValor}>{item.totalVendido} un.</Text>
       </View>
       <View style={styles.detalheRow}>
         <Text style={styles.detalheLabel}>Estoque Atual:</Text>
         <Text style={[styles.detalheValor, styles.estoqueValor]}>{item.estoqueDisponivel} un.</Text>
       </View>
-      
       <View style={[styles.detalheRow, styles.lucroContainer]}>
-        <Text style={styles.lucroLabel}>Lucro do Produto:</Text>
-        <Text style={styles.lucroValor}>
-          R$ {item.lucroTotal.toFixed(2)}
-        </Text>
+        <Text style={styles.lucroLabel}>Lucro (Total):</Text>
+        <Text style={styles.lucroValor}>R$ {item.lucroTotal.toFixed(2)}</Text>
       </View>
     </View>
   );
 
-  // --- MUDANÇA: Componente para renderizar o Gráfico ---
-  // --- MUDANÇA: Componente para renderizar o Gráfico ---
+  // renderChart (Sem mudanças)
   const renderChart = () => {
-    if (isLoading) {
-        return <ActivityIndicator size="large" color={cores.verdeEscuro} style={{ marginVertical: 40 }} />;
-    }
-    
-    if (!dadosGrafico) {
+    if (!dadosGrafico && !isLoading) {
         return (
             <View style={styles.emptyContainer}>
                 <ChartLineUp size={32} color={cores.verdeClaro} />
-                <Text style={styles.emptyText}>Sem dados de vendas para exibir o gráfico.</Text>
-                <Text style={styles.emptyText}>Registre algumas saídas para começar.</Text>
+                <Text style={styles.emptyText}>Sem dados de vendas para o período selecionado.</Text>
             </View>
         );
     }
-    
     return (
       <View style={styles.chartContainer}>
-        <Text style={styles.listaTitulo}>Evolução de Gasto vs. Recebido</Text>
-        <LineChart
-          data={dadosGrafico}
-          width={screenWidth - 32} // Largura da tela menos as margens
-          height={250}
-          yAxisLabel="R$ "
-          yAxisSuffix=""
-          chartConfig={chartConfig}
-          bezier // Deixa a linha curvada
-          style={{
-            borderRadius: 12,
-            paddingTop: 16,
-          }}
-          // A propriedade 'legend' foi removida daqui,
-          // pois ela já está incluída dentro do 'dadosGrafico'
-        />
+        <Text style={styles.listaTitulo}>Evolução de Gasto vs. Recebido (Período)</Text>
+        {dadosGrafico && (
+            <LineChart
+            data={dadosGrafico}
+            width={screenWidth - 32} 
+            height={250}
+            yAxisLabel="R$ "
+            yAxisSuffix=""
+            chartConfig={chartConfig}
+            bezier
+            style={{ borderRadius: 12, paddingTop: 16 }}
+            />
+        )}
       </View>
     );
   };
-  // --- Fim da Mudança ---
 
 
-  // O return da tela principal agora usa FlatList
-  // para podermos rolar a tela e ver o gráfico e a lista
   return (
     <SafeAreaView style={styles.container}>
       {isLoading ? (
@@ -362,16 +378,48 @@ export default function RelatorioScreen() {
           style={styles.lista}
           ListHeaderComponent={
             <>
-              {/* Card de Resumo Geral */}
+              {/* --- MUDANÇA: Área de Filtros refatorada --- */}
+              <View style={styles.filtroContainer}>
+                <View style={styles.filtroHeader}>
+                  <Funnel size={18} color={cores.verdeEscuro} weight="bold" />
+                  <Text style={styles.filtroTitulo}>Filtrar Relatório</Text>
+                </View>
+
+                <View style={styles.pickersContainer}>
+                  {/* Botão Falso de Picker (Ano) */}
+                  <TouchableOpacity 
+                    style={styles.pickerButton} 
+                    onPress={() => openPicker('ano')}
+                  >
+                    <Text style={styles.pickerButtonText}>{filtroAno || 'Todos os Anos'}</Text>
+                    <CaretDown size={16} color={cores.texto} />
+                  </TouchableOpacity>
+
+                  {/* Botão Falso de Picker (Mês) */}
+                  <TouchableOpacity
+                    style={[styles.pickerButton, !filtroAno && styles.pickerDesabilitado]}
+                    onPress={() => openPicker('mes')}
+                    disabled={!filtroAno}
+                  >
+                    <Text style={styles.pickerButtonText}>
+                      {filtroMes === TODOS_OS_MESES ? 'Todos os Meses' : meses[filtroMes]}
+                    </Text>
+                    <CaretDown size={16} color={cores.texto} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+              {/* --- Fim da Mudança --- */}
+
+              {/* Card de Resumo (sem mudanças) */}
               <View style={styles.resumoGeralCard}>
                 <View>
-                  <Text style={styles.resumoGeralLabel}>Lucro Total Acumulado</Text>
-                  <Text style={styles.resumoGeralValor}>R$ {lucroGeral.toFixed(2)}</Text>
+                  <Text style={styles.resumoGeralLabel}>Lucro Total (Período)</Text>
+                  <Text style={styles.resumoGeralValor}>R$ {lucroPeriodo.toFixed(2)}</Text>
                 </View>
                 <ChartLineUp size={40} color={cores.branco} weight="bold" />
               </View>
 
-              {/* Botão de Exportar */}
+              {/* Botão de Exportar (sem mudanças) */}
               <TouchableOpacity 
                 style={styles.botaoExportar}
                 onPress={handleExportarPDF}
@@ -383,10 +431,14 @@ export default function RelatorioScreen() {
                 </Text>
               </TouchableOpacity>
 
-              {/* --- MUDANÇA: Renderiza o gráfico aqui --- */}
+              {/* Gráfico (sem mudanças) */}
               {renderChart()}
 
-              <Text style={styles.listaTitulo}>Relatório Detalhado por Produto</Text>
+              {/* Títulos da Lista (sem mudanças) */}
+              <Text style={styles.listaTitulo}>Relatório Detalhado de Estoque (Visão Atual)</Text>
+              <Text style={styles.listaSubtitulo}>
+                Esta lista mostra o status TOTAL do estoque (sempre atual) e não é afetada pelos filtros de data.
+              </Text>
             </>
           }
           ListEmptyComponent={
@@ -397,36 +449,158 @@ export default function RelatorioScreen() {
           }
         />
       )}
+
+      {/* --- MUDANÇA: Modal do Picker --- */}
+      <Modal
+        transparent={true}
+        visible={isModalVisible}
+        animationType="fade"
+        onRequestClose={() => setIsModalVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setIsModalVisible(false)}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.modalContent}>
+                <Text style={styles.modalTitle}>
+                  {pickerMode === 'ano' ? 'Selecione o Ano' : 'Selecione o Mês'}
+                </Text>
+                <FlatList
+                  data={modalData}
+                  keyExtractor={item => String(item.value)}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity style={styles.modalItem} onPress={() => onSelectItem(item)}>
+                      <Text style={styles.modalItemText}>{item.label}</Text>
+                    </TouchableOpacity>
+                  )}
+                  style={styles.modalList}
+                />
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+      {/* --- Fim da Mudança --- */}
+
     </SafeAreaView>
   );
 }
 
-// --- MUDANÇA: Configuração de cores do Gráfico ---
+// Configuração do Gráfico (sem mudanças)
 const chartConfig = {
   backgroundColor: cores.branco,
   backgroundGradientFrom: cores.branco,
   backgroundGradientTo: cores.branco,
   decimalPlaces: 2,
-  color: (opacity = 1) => `rgba(50, 94, 84, ${opacity})`, // Cor principal (labels)
-  labelColor: (opacity = 1) => `rgba(50, 94, 84, ${opacity})`, // Cor dos labels
-  style: {
-    borderRadius: 16,
-  },
-  propsForDots: {
-    r: '4', // Tamanho dos pontos
-    strokeWidth: '2',
-    stroke: cores.verdeMedio, // Borda dos pontos
-  },
+  color: (opacity = 1) => `rgba(50, 94, 84, ${opacity})`, 
+  labelColor: (opacity = 1) => `rgba(50, 94, 84, ${opacity})`,
+  style: { borderRadius: 16, },
+  propsForDots: { r: '4', strokeWidth: '2', stroke: cores.verdeMedio, },
 };
-// --- Fim da Mudança ---
 
 
-// Estilos (Com adições)
+// Estilos (MUDANÇAS nos filtros e ADIÇÃO do modal)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: cores.begeFundo,
   },
+  filtroContainer: {
+    backgroundColor: cores.branco,
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  filtroHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: cores.verdeClaro,
+    paddingBottom: 8,
+  },
+  filtroTitulo: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: cores.texto,
+    marginLeft: 8,
+  },
+  pickersContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8, // Adicionado
+  },
+  // --- MUDANÇA: Estilos do Botão Falso ---
+  pickerButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 44,
+    backgroundColor: cores.begeFundo,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: cores.verdeClaro,
+    margin: 4, 
+    paddingHorizontal: 10,
+  },
+  pickerButtonText: {
+    color: cores.texto,
+    fontSize: 14, // Ajustado
+  },
+  pickerDesabilitado: {
+      backgroundColor: '#ECEAE1',
+      opacity: 0.7,
+  },
+  // --- FIM DA MUDANÇA (Estilos 'pickerWrapper' e 'picker' removidos) ---
+
+  // --- MUDANÇA: Estilos do Modal ---
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: cores.branco,
+    borderRadius: 12,
+    padding: 16,
+    width: '100%',
+    maxHeight: '60%', // Limita a altura do modal
+    elevation: 10,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: cores.texto,
+    marginBottom: 16,
+    textAlign: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: cores.verdeClaro,
+    paddingBottom: 8,
+  },
+  modalList: {
+      // Se necessário, pode limitar a altura
+  },
+  modalItem: {
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: cores.begeFundo,
+  },
+  modalItemText: {
+    color: cores.texto,
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  // --- FIM DA MUDANÇA ---
+
+  // (O resto dos estilos abaixo não foi alterado)
   resumoGeralCard: {
     backgroundColor: cores.verdeMedio, 
     marginHorizontal: 16,
@@ -467,8 +641,6 @@ const styles = StyleSheet.create({
     color: cores.verdeEscuro,
     marginLeft: 10,
   },
-
-  // --- MUDANÇA: Estilos do Gráfico ---
   chartContainer: {
     marginHorizontal: 16,
     marginTop: 16,
@@ -476,17 +648,23 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingBottom: 10,
     elevation: 2,
-    alignItems: 'center', // Centraliza o gráfico
+    alignItems: 'center', 
   },
-  // --- Fim da Mudança ---
-
   listaTitulo: {
     fontSize: 18,
     fontWeight: 'bold',
     color: cores.texto,
     marginLeft: 16,
-    marginTop: 20, // Ajustado
+    marginTop: 20, 
     marginBottom: 10,
+  },
+  listaSubtitulo: {
+      fontSize: 13,
+      color: cores.verdeMedio,
+      fontStyle: 'italic',
+      marginHorizontal: 16,
+      marginBottom: 10,
+      marginTop: -4,
   },
   lista: {
     flex: 1,
@@ -545,7 +723,7 @@ const styles = StyleSheet.create({
   emptyContainer: {
       justifyContent: 'center',
       alignItems: 'center',
-      paddingVertical: 40, // Aumentado
+      paddingVertical: 40, 
       paddingHorizontal: 16,
       backgroundColor: cores.branco,
       marginHorizontal: 16,
